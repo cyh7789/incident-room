@@ -133,6 +133,15 @@ describe("Incident Room acceptance", () => {
     ).not.toBeNull();
   });
 
+  test("does not claim a registered WebMCP surface in unsupported browsers", async () => {
+    const view = renderApp();
+
+    await waitFor(() => expect(view.container.querySelector(".webmcp-unsupported")).not.toBeNull());
+    expect(view.container.querySelector(".webmcp-unsupported")?.textContent?.trim()).toBe(
+      "WebMCP unsupported",
+    );
+  });
+
   test("webmcp/shared-visible-state", async () => {
     const harness = modelContextHarness();
     const fetchMock = vi.fn(async () => jsonResponse(liveIncident));
@@ -179,7 +188,13 @@ describe("Incident Room acceptance", () => {
     fireEvent.click(screen.getByRole("button", { name: "Diagnose the change" }));
     expect(main.getAttribute("data-active-step")).toBe("2");
     expect(screen.getByRole("button", { name: /step 2: diagnose/i }).getAttribute("aria-current")).toBe("step");
+    expect(screen.getByText("Waiting for deployment comparison")).toBeTruthy();
     expect(view.container.contains(form)).toBe(true);
+
+    fireEvent.click(screen.getByRole("button", { name: "Show change comparison" }));
+    await waitFor(() => expect(screen.getByText("response status: 200 → 500")).toBeTruthy());
+    fireEvent.click(screen.getByRole("button", { name: "Review Recovery Plan" }));
+    await waitFor(() => expect(document.activeElement?.id).toBe("plan-title"));
 
     const toolActivated = new Event("toolactivated");
     Object.defineProperty(toolActivated, "toolName", {
@@ -193,6 +208,10 @@ describe("Incident Room acceptance", () => {
     expect(screen.getByRole("button", { name: /step 3: approve/i }).getAttribute("aria-current")).toBe("step");
     expect(screen.getByText("Agent draft is visible in this tab")).toBeTruthy();
     expect(view.container.contains(form)).toBe(true);
+
+    fireEvent.click(screen.getByRole("button", { name: /step 1: observe/i }));
+    expect(screen.queryByText("Recovery Plan not drafted yet")).toBeNull();
+    expect(screen.getByText("Recovery Plan already prepared")).toBeTruthy();
 
     fireEvent.change(screen.getByLabelText("Recovery scope"), {
       target: { value: "checkout" },

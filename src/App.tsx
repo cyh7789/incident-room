@@ -253,30 +253,30 @@ function EvidenceConnection({
       </div>
 
       <div className="evidence-source-facts">
-        <span>
+        <div>
           <Cloud aria-hidden="true" size={19} />
           <div>
             <small>Data owner</small>
             <strong>App-owned sandbox</strong>
             <p>No visitor token</p>
           </div>
-        </span>
-        <span>
+        </div>
+        <div>
           <Activity aria-hidden="true" size={19} />
           <div>
             <small>Live reads</small>
             <strong>Health + deployment IDs</strong>
             <p>Service Bindings + Controller</p>
           </div>
-        </span>
-        <span>
+        </div>
+        <div>
           <ShieldCheck aria-hidden="true" size={19} />
           <div>
             <small>Write boundary</small>
             <strong>Checkout Worker only</strong>
             <p>Payment stays read-only</p>
           </div>
-        </span>
+        </div>
       </div>
 
       <div className="evidence-source-footer">
@@ -343,6 +343,9 @@ export default function App() {
         : isIncidentLoading
           ? 1
           : 2;
+  const hasPreparedPlan = plan.state !== "EMPTY" && plan.state !== "EVIDENCE_READY";
+  const showsRegisteredWebMcpSurface =
+    webMcpStatus === "REGISTERING" || webMcpStatus === "READY";
 
   const goToStep = useCallback((step: GuidedStep) => {
     setActiveStep(step);
@@ -461,7 +464,8 @@ export default function App() {
           </span>
           <span className={`runtime-badge webmcp-${webMcpStatus.toLowerCase()}`}>
             <Bot aria-hidden="true" size={14} />
-            WebMCP {webMcpStatus.toLowerCase()} · 2 tools + 1 form
+            WebMCP {webMcpStatus.toLowerCase()}
+            {showsRegisteredWebMcpSurface ? " · 2 tools + 1 form" : ""}
           </span>
         </div>
       </header>
@@ -635,7 +639,9 @@ export default function App() {
               <span>{String(activeStep).padStart(2, "0")}</span>
               <div>
                 <strong>
-                  {activeStep === 1
+                  {activeStep <= 2 && hasPreparedPlan
+                    ? "Recovery Plan already prepared"
+                    : activeStep === 1
                     ? "Observe before drafting"
                     : activeStep === 2
                       ? "Attach the verified change"
@@ -644,7 +650,9 @@ export default function App() {
                         : "Controller returns visible proof"}
                 </strong>
                 <p>
-                  {activeStep === 1
+                  {activeStep <= 2 && hasPreparedPlan
+                    ? "Use the step track to return to the current approval or verification state."
+                    : activeStep === 1
                     ? "The plan stays empty until live incident evidence is visible."
                     : activeStep === 2
                       ? "The deployment comparison becomes the context for this same plan."
@@ -655,22 +663,32 @@ export default function App() {
               </div>
             </div>
 
-            <div className="plan-awaiting plan-setup-only">
-              <Bot aria-hidden="true" size={22} />
-              <div>
-                <strong>{activeStep === 1 ? "Recovery Plan not drafted yet" : "Change context ready for the plan"}</strong>
-                <p>
-                  {activeStep === 1
-                    ? "Inspect the live 500 and healthy payment service first."
-                    : "Open the suspected change, then continue to let the agent prepare this live form."}
-                </p>
+            {!hasPreparedPlan && (
+              <div className="plan-awaiting plan-setup-only">
+                <Bot aria-hidden="true" size={22} />
+                <div>
+                  <strong>
+                    {activeStep === 1
+                      ? "Recovery Plan not drafted yet"
+                      : selectedChange
+                        ? "Change context ready for the plan"
+                        : "Waiting for deployment comparison"}
+                  </strong>
+                  <p>
+                    {activeStep === 1
+                      ? "Inspect the live 500 and healthy payment service first."
+                      : selectedChange
+                        ? "The verified comparison is attached. Continue to let the agent prepare this live form."
+                        : "Open the suspected change, then continue to let the agent prepare this live form."}
+                  </p>
+                </div>
+                <dl>
+                  <div><dt>Scope</dt><dd>Agent draft pending</dd></div>
+                  <div><dt>Target</dt><dd>Allowlisted checkout version</dd></div>
+                  <div><dt>Submit</dt><dd>Human only</dd></div>
+                </dl>
               </div>
-              <dl>
-                <div><dt>Scope</dt><dd>Agent draft pending</dd></div>
-                <div><dt>Target</dt><dd>Allowlisted checkout version</dd></div>
-                <div><dt>Submit</dt><dd>Human only</dd></div>
-              </dl>
-            </div>
+            )}
 
             <div className="plan-collaboration-note step-3-only" aria-label="Recovery Plan interface">
               <Bot aria-hidden="true" size={17} />

@@ -151,13 +151,18 @@ describe("Incident Room acceptance", () => {
     })).toBeTruthy();
     expect(screen.getByText("The shared page is the handoff.")).toBeTruthy();
     expect(screen.getByText("Reads evidence")).toBeTruthy();
+    expect(screen.getByText("Carries the live plan")).toBeTruthy();
     expect(screen.getByText("Edits + submits")).toBeTruthy();
+    expect(screen.getByText("Checks, writes + verifies")).toBeTruthy();
 
     const trigger = screen.getByRole("button", { name: "How it works" });
     fireEvent.click(trigger);
     expect(screen.getByRole("dialog", { name: "How Incident Room works" })).toBeTruthy();
     expect(screen.getByText("Where does the data come from?")).toBeTruthy();
-    expect(screen.getByText("There is no", { exact: false })).toBeTruthy();
+    expect(screen.getByText(/app-owned Cloudflare rehearsal lab/i)).toBeTruthy();
+    expect(screen.getAllByText(/payment stays read-only/i).length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByText(/human personally submits/i)).toBeTruthy();
+    expect(screen.getByText(/scenario controls can prepare only allowlisted lab failures/i)).toBeTruthy();
     await waitFor(() => expect(document.activeElement?.getAttribute("aria-label")).toBe(
       "Close How Incident Room works",
     ));
@@ -218,8 +223,12 @@ describe("Incident Room acceptance", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Show change comparison" }));
     await waitFor(() => expect(screen.getByText("response status: 200 → 500")).toBeTruthy());
+    expect(screen.getAllByText("Human opened deployment evidence").length).toBeGreaterThanOrEqual(1);
+    expect(screen.queryByText("Agent called show_change_comparison")).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Review Recovery Plan" }));
     await waitFor(() => expect(document.activeElement?.id).toBe("plan-title"));
+    expect(screen.getByText("Default plan values are ready for human review")).toBeTruthy();
+    expect(screen.queryByText("Agent prepared this live form")).toBeNull();
 
     const toolActivated = new Event("toolactivated");
     Object.defineProperty(toolActivated, "toolName", {
@@ -232,6 +241,7 @@ describe("Incident Room acceptance", () => {
     expect(main.getAttribute("data-active-step")).toBe("3");
     expect(screen.getByRole("button", { name: /step 3: approve/i }).getAttribute("aria-current")).toBe("step");
     expect(screen.getByText("Agent draft is visible in this tab")).toBeTruthy();
+    expect(screen.getByText("Agent prepared this live form")).toBeTruthy();
     expect(view.container.contains(form)).toBe(true);
 
     fireEvent.click(screen.getByRole("button", { name: /step 1: observe/i }));
@@ -292,6 +302,26 @@ describe("Incident Room acceptance", () => {
     expect(screen.getByText("Stopped before rollback write")).toBeTruthy();
     expect(screen.getByText("Human edited the Recovery Plan")).toBeTruthy();
     expect(screen.getByText("Human submitted this page state")).toBeTruthy();
+  });
+
+  test("keeps a failed controller request visible in the verification step", async () => {
+    const fetchMock = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      if (!init?.method || init.method === "GET") return jsonResponse(liveIncident);
+      return jsonResponse({ message: "Controller unavailable. Try again." }, 500);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const view = renderApp();
+    await waitFor(() => expect(screen.getByText("Cloudflare lab")).toBeTruthy());
+
+    const form = view.container.querySelector(
+      'form[toolname="prepare_recovery_rehearsal"]',
+    ) as HTMLFormElement;
+    fireEvent.submit(form);
+
+    await waitFor(() => expect(screen.getByText("Recovery request failed before verification")).toBeTruthy());
+    expect(screen.getByRole("main").getAttribute("data-active-step")).toBe("4");
+    expect(screen.getByRole("alert").textContent).toContain("Controller unavailable. Try again.");
+    expect(screen.queryByText("No write occurs until the human submits this exact page state.")).toBeNull();
   });
 
   test("keeps stale refusal visible after refresh and verified recovery", async () => {

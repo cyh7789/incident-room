@@ -862,7 +862,8 @@ h2 { margin-bottom: 0; font-size: 1.08rem; line-height: 1.3; letter-spacing: -0.
 .stage-title-block { display: grid; grid-template-columns: auto 1fr; align-items: start; gap: 16px; margin-bottom: 24px; padding-bottom: 20px; border-bottom: 1px solid var(--border); }
 .stage-title-block > div { min-width: 0; }
 .stage-title-block h2 { margin-bottom: 6px; font-size: clamp(1.2rem, 2.1vw, 1.55rem); }
-.stage-title-block h2:focus { outline: none; }
+.stage-title-block h2:focus-visible,
+.plan-heading h2:focus-visible { outline: 3px solid var(--focus); outline-offset: 5px; border-radius: 4px; }
 .stage-title-block p:last-child { max-width: 68ch; margin-bottom: 0; color: var(--text-muted); line-height: 1.55; }
 .stage-number { display: grid; width: 46px; height: 46px; place-items: center; border: 1px solid #9d8578; border-radius: 15px; background: #efe2d9; color: var(--accent-strong); font-size: 0.78rem; font-weight: 800; font-variant-numeric: tabular-nums; }
 .recovery-stage-title { margin-bottom: 20px; }

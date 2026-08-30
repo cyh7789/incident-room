@@ -50,6 +50,8 @@ Deploy `checkout-broken` and `payment-healthy` at 100%, then record both public 
 - WebMCP exposes two imperative tools and one declarative Recovery Plan form.
 - The form intentionally omits `toolautosubmit`; the operator must press Submit.
 - The reset control is a normal human page action, not a WebMCP tool. It writes only the allowlisted broken checkout version and verifies checkout 500 before reporting READY.
+- `POST /api/lab/competing-deployment` is a demo-only scenario control, not a WebMCP tool or Recovery Plan write. It writes only the allowlisted concurrent checkout version used to prove `PLAN_STALE` without rollback.
+- Only manual submission of the visible Recovery Plan can enter the healthy recovery write path.
 - The server can read and write only `incident-room-checkout` and read `incident-room-payment`.
 - Cloudflare Service Bindings carry health and fixed checkout probes between the three dedicated Workers; the server-side API token is used only for allowlisted deployment reads and writes.
 - Workers Logs are secondary evidence. Health, deployment responses, and the fixed checkout request are primary evidence.

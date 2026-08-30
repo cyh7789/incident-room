@@ -136,29 +136,35 @@ function GuidedProgress({
           title: "Recovery proved by the same checkout request",
           detail: "The Controller wrote the rollback only after approval, then verified the fixed request changed from 500 to 200.",
         }
-      : state === "SUBMITTING"
+      : state === "FAILED"
         ? {
-            mode: "active",
-            title: "Controller is checking the approved page state",
-            detail: "The deployment stale gate runs before any rollback write.",
+            mode: "blocked",
+            title: "Recovery request failed before verification",
+            detail: "The Controller did not return verified recovery proof. No successful rollback is claimed.",
           }
-        : state === "DRAFTED"
+        : state === "SUBMITTING"
           ? {
               mode: "active",
-              title: "Agent draft is visible in this tab",
-              detail: "The shared Recovery Plan stays mounted for the human decision.",
+              title: "Controller is checking the approved page state",
+              detail: "The deployment stale gate runs before any rollback write.",
             }
-          : state === "HUMAN_EDITED"
+          : state === "DRAFTED"
             ? {
                 mode: "active",
-                title: "Human changed the shared page state",
-                detail: "Only the scope and reason visible here can cross the write gate.",
+                title: "Agent draft is visible in this tab",
+                detail: "The shared Recovery Plan stays mounted for the human decision.",
               }
-            : {
-                mode: "idle",
-                title: "Follow one causal path",
-                detail: "Observe the live failure, diagnose the change, approve the smallest plan, then verify the same request.",
-              };
+            : state === "HUMAN_EDITED"
+              ? {
+                  mode: "active",
+                  title: "Human changed the shared page state",
+                  detail: "Only the scope and reason visible here can cross the write gate.",
+                }
+              : {
+                  mode: "idle",
+                  title: "Follow one causal path",
+                  detail: "Observe the live failure, diagnose the change, approve the smallest plan, then verify the same request.",
+                };
 
   return (
     <section className={`guided-progress guided-${status.mode}`} aria-labelledby="guided-title">
@@ -351,6 +357,12 @@ export default function App() {
           ? 1
           : 2;
   const hasPreparedPlan = plan.state !== "EMPTY" && plan.state !== "EVIDENCE_READY";
+  const comparisonActor = [...plan.activities]
+    .reverse()
+    .find((activity) => activity.id.endsWith("-opened-change"))?.actor;
+  const agentPreparedPlan = plan.activities.some(
+    (activity) => activity.id === "agent-prepared-plan",
+  );
   const showsRegisteredWebMcpSurface =
     webMcpStatus === "REGISTERING" || webMcpStatus === "READY";
 
@@ -529,11 +541,11 @@ export default function App() {
           <div className="product-causal-chain" aria-label="Incident Room responsibility chain">
             <span><Bot aria-hidden="true" size={18} /><small>Agent</small><strong>Reads evidence</strong></span>
             <ArrowRight aria-hidden="true" size={16} />
-            <span><BookOpen aria-hidden="true" size={18} /><small>Shared page</small><strong>Drafts the plan</strong></span>
+            <span><BookOpen aria-hidden="true" size={18} /><small>Shared page</small><strong>Carries the live plan</strong></span>
             <ArrowRight aria-hidden="true" size={16} />
             <span><UserRound aria-hidden="true" size={18} /><small>Human</small><strong>Edits + submits</strong></span>
             <ArrowRight aria-hidden="true" size={16} />
-            <span><ShieldCheck aria-hidden="true" size={18} /><small>Controller</small><strong>Refuses or verifies</strong></span>
+            <span><ShieldCheck aria-hidden="true" size={18} /><small>Controller</small><strong>Checks, writes + verifies</strong></span>
           </div>
         </section>
 
@@ -633,7 +645,13 @@ export default function App() {
               <div className={`inline-tool-activity ${selectedChange ? "is-complete" : ""}`} role="status">
                 <Bot aria-hidden="true" size={17} />
                 <span>
-                  <strong>{selectedChange ? "Agent called show_change_comparison" : "Waiting for show_change_comparison"}</strong>
+                  <strong>
+                    {selectedChange
+                      ? comparisonActor === "AGENT"
+                        ? "Agent called show_change_comparison"
+                        : "Human opened deployment evidence"
+                      : "Waiting for show_change_comparison"}
+                  </strong>
                   <small>{selectedChange ? "Live page updated with deployment evidence" : "The result will appear in this shared canvas"}</small>
                 </span>
               </div>
@@ -712,7 +730,9 @@ export default function App() {
                     : activeStep === 2
                       ? "Attach the verified change"
                       : activeStep === 3
-                        ? "Agent drafts, human decides"
+                        ? agentPreparedPlan
+                          ? "Agent draft, human decision"
+                          : "Visible defaults, human decision"
                         : "Controller returns visible proof"}
                 </strong>
                 <p>
@@ -723,7 +743,9 @@ export default function App() {
                     : activeStep === 2
                       ? "The deployment comparison becomes the context for this same plan."
                       : activeStep === 3
-                        ? "Edit scopeMode in this page and personally Submit the final state."
+                        ? agentPreparedPlan
+                          ? "Review the agent draft, edit scopeMode, and personally Submit the final state."
+                          : "Review the visible defaults, edit scopeMode, and personally Submit the final state."
                         : "A stale refusal and a verified rollback remain attached to this plan."}
                 </p>
               </div>
@@ -744,12 +766,12 @@ export default function App() {
                     {activeStep === 1
                       ? "Inspect the live 500 and healthy payment service first."
                       : selectedChange
-                        ? "The verified comparison is attached. Continue to let the agent prepare this live form."
-                        : "Open the suspected change, then continue to let the agent prepare this live form."}
+                        ? "The verified comparison is attached. Review the visible defaults or let the agent prepare them through WebMCP."
+                        : "Open the suspected change, then review the visible defaults or let the agent prepare them through WebMCP."}
                   </p>
                 </div>
                 <dl>
-                  <div><dt>Scope</dt><dd>Agent draft pending</dd></div>
+                  <div><dt>Scope</dt><dd>Visible defaults await review</dd></div>
                   <div><dt>Target</dt><dd>Allowlisted checkout version</dd></div>
                   <div><dt>Submit</dt><dd>Human only</dd></div>
                 </dl>
@@ -757,8 +779,11 @@ export default function App() {
             )}
 
             <div className="plan-collaboration-note step-3-only" aria-label="Recovery Plan interface">
-              <Bot aria-hidden="true" size={17} />
-              <span><strong>Agent prepared this live form</strong><small>You can see every value, change the scope, and decide whether to Submit.</small></span>
+              {agentPreparedPlan ? <Bot aria-hidden="true" size={17} /> : <BookOpen aria-hidden="true" size={17} />}
+              <span>
+                <strong>{agentPreparedPlan ? "Agent prepared this live form" : "Default plan values are ready for human review"}</strong>
+                <small>You can see every value, change the scope, and decide whether to Submit.</small>
+              </span>
             </div>
 
             <form
@@ -771,7 +796,10 @@ export default function App() {
               <div className="form-group">
                 <div className="field-label-line">
                   <label htmlFor="scopeMode">Recovery scope</label>
-                  <span className="field-activity"><Bot aria-hidden="true" size={13} /> Agent proposed · <strong>Human decides</strong></span>
+                  <span className="field-activity">
+                    {agentPreparedPlan ? <Bot aria-hidden="true" size={13} /> : <BookOpen aria-hidden="true" size={13} />}
+                    {agentPreparedPlan ? "Agent proposed" : "Default scope"} · <strong>Human decides</strong>
+                  </span>
                 </div>
                 <select
                   id="scopeMode"
@@ -805,7 +833,10 @@ export default function App() {
               <div className="form-group">
                 <div className="field-label-line">
                   <label htmlFor="reason">Reason</label>
-                  <span className="field-activity"><Bot aria-hidden="true" size={13} /> Agent drafted</span>
+                  <span className="field-activity">
+                    {agentPreparedPlan ? <Bot aria-hidden="true" size={13} /> : <BookOpen aria-hidden="true" size={13} />}
+                    {agentPreparedPlan ? "Agent drafted" : "Default rationale"}
+                  </span>
                 </div>
                 <textarea
                   id="reason"
@@ -822,8 +853,6 @@ export default function App() {
                 <code>{isIncidentLoading ? "Loading…" : plan.observedDeploymentId}</code>
               </div>
 
-              {error && <p className="form-error" role="alert">{error}</p>}
-
               <button
                 type="submit"
                 className="primary-button"
@@ -839,7 +868,7 @@ export default function App() {
               </button>
               <p className="submit-note">
                 {incident.health.checkout === "DEGRADED"
-                  ? "The agent can fill this live form. Submit is the only path to the Controller Worker write gate."
+                  ? "The agent can fill this live form. Submit is the only path to the Controller Worker recovery write gate."
                   : "Checkout is healthy. Start a fresh rehearsal before preparing another rollback."}
               </p>
             </form>
@@ -850,7 +879,15 @@ export default function App() {
             </div>
 
             <div className="result-area step-4-only" aria-live="polite">
-              {plan.result ? (
+              {plan.state === "FAILED" ? (
+                <div className="result-card result-execution_failed" role="alert">
+                  <AlertTriangle aria-hidden="true" size={20} />
+                  <div>
+                    <strong>Recovery request failed</strong>
+                    <p>{error ?? "The Controller did not return recovery proof."}</p>
+                  </div>
+                </div>
+              ) : plan.result ? (
                 <div className="result-stack">
                   <div className={`result-card result-${plan.result.status.toLowerCase()}`}>
                     {plan.result.status === "RECOVERED" ? (
@@ -977,7 +1014,7 @@ export default function App() {
               <article>
                 <UserRound aria-hidden="true" size={21} />
                 <div><small>Human</small><h3>Changes and approves</h3></div>
-                <p>The person sees every proposed value, narrows <code>scopeMode</code>, and personally submits. There is no <code>toolautosubmit</code>.</p>
+                <p>The human personally submits after reviewing every proposed value and narrowing <code>scopeMode</code>. There is no <code>toolautosubmit</code>.</p>
               </article>
               <article>
                 <LockKeyhole aria-hidden="true" size={21} />
@@ -989,11 +1026,15 @@ export default function App() {
             <div className="explainer-faq">
               <div>
                 <Database aria-hidden="true" size={19} />
-                <span><strong>Where does the data come from?</strong><p>Dedicated checkout and payment Cloudflare Workers owned by this app. Visitors provide no token; payment remains read-only.</p></span>
+                <span><strong>Where does the data come from?</strong><p>Dedicated checkout and payment Cloudflare Workers owned by this app. Visitors provide no token; payment stays read-only.</p></span>
               </div>
               <div>
                 <ShieldCheck aria-hidden="true" size={19} />
                 <span><strong>Why use WebMCP here?</strong><p>The agent and person operate the same mounted Recovery Plan on the live page, so preparation, edits, refusal, and proof stay visible in one place.</p></span>
+              </div>
+              <div>
+                <LockKeyhole aria-hidden="true" size={19} />
+                <span><strong>What else can write to the lab?</strong><p>Scenario controls can prepare only allowlisted lab failures, including the competing deployment used to prove <code>PLAN_STALE</code>. Only a human-submitted Recovery Plan can write the healthy recovery target.</p></span>
               </div>
             </div>
           </section>

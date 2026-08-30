@@ -142,6 +142,31 @@ describe("Incident Room acceptance", () => {
     );
   });
 
+  test("explains the product, responsibility chain, and data boundary", async () => {
+    renderApp();
+
+    expect(screen.getByRole("heading", {
+      level: 1,
+      name: "One live Recovery Plan. Agent prepares it. Human decides.",
+    })).toBeTruthy();
+    expect(screen.getByText("The shared page is the handoff.")).toBeTruthy();
+    expect(screen.getByText("Reads evidence")).toBeTruthy();
+    expect(screen.getByText("Edits + submits")).toBeTruthy();
+
+    const trigger = screen.getByRole("button", { name: "How it works" });
+    fireEvent.click(trigger);
+    expect(screen.getByRole("dialog", { name: "How Incident Room works" })).toBeTruthy();
+    expect(screen.getByText("Where does the data come from?")).toBeTruthy();
+    expect(screen.getByText("There is no", { exact: false })).toBeTruthy();
+    await waitFor(() => expect(document.activeElement?.getAttribute("aria-label")).toBe(
+      "Close How Incident Room works",
+    ));
+
+    fireEvent.keyDown(window, { key: "Escape" });
+    expect(screen.queryByRole("dialog", { name: "How Incident Room works" })).toBeNull();
+    expect(document.activeElement).toBe(trigger);
+  });
+
   test("webmcp/shared-visible-state", async () => {
     const harness = modelContextHarness();
     const fetchMock = vi.fn(async () => jsonResponse(liveIncident));

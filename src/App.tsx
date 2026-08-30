@@ -4,13 +4,17 @@ import {
   ArrowLeft,
   ArrowRight,
   Bot,
+  BookOpen,
   CheckCircle2,
   CircleDot,
   Cloud,
+  Database,
   GitCompareArrows,
+  LockKeyhole,
   RefreshCw,
   ShieldCheck,
   UserRound,
+  X,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { FormEvent, ReactNode } from "react";
@@ -325,7 +329,10 @@ export default function App() {
   );
   const webMcpStatus = useWebMcpTools(webMcpActions);
   const formRef = useRef<HTMLFormElement>(null);
+  const explainerTriggerRef = useRef<HTMLButtonElement>(null);
+  const explainerCloseRef = useRef<HTMLButtonElement>(null);
   const [activeStep, setActiveStep] = useState<GuidedStep>(1);
+  const [isExplainerOpen, setIsExplainerOpen] = useState(false);
   const isRecoveryDisabled =
     isIncidentLoading ||
     isLabResetting ||
@@ -346,6 +353,29 @@ export default function App() {
   const hasPreparedPlan = plan.state !== "EMPTY" && plan.state !== "EVIDENCE_READY";
   const showsRegisteredWebMcpSurface =
     webMcpStatus === "REGISTERING" || webMcpStatus === "READY";
+
+  useEffect(() => {
+    if (!isExplainerOpen) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    requestAnimationFrame(() => explainerCloseRef.current?.focus());
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        setIsExplainerOpen(false);
+      } else if (event.key === "Tab") {
+        event.preventDefault();
+        explainerCloseRef.current?.focus();
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+      document.body.style.overflow = previousOverflow;
+      explainerTriggerRef.current?.focus();
+    };
+  }, [isExplainerOpen]);
 
   const goToStep = useCallback((step: GuidedStep) => {
     setActiveStep(step);
@@ -453,24 +483,60 @@ export default function App() {
           <span className="brand-mark"><Activity aria-hidden="true" size={20} /></span>
           <span>Incident Room</span>
         </a>
-        <div className="topbar-status" aria-label="Runtime status">
-          <span className={`runtime-badge ${isIncidentLoading ? "mode-loading" : `mode-${incident.evidenceMode.toLowerCase()}`}`}>
-            <Cloud aria-hidden="true" size={14} />
-            {isIncidentLoading
-              ? "Connecting lab"
-              : incident.evidenceMode === "LIVE"
-                ? "Cloudflare lab"
-                : "Local fixture"}
-          </span>
-          <span className={`runtime-badge webmcp-${webMcpStatus.toLowerCase()}`}>
-            <Bot aria-hidden="true" size={14} />
-            WebMCP {webMcpStatus.toLowerCase()}
-            {showsRegisteredWebMcpSurface ? " · 2 tools + 1 form" : ""}
-          </span>
+        <div className="topbar-actions">
+          <button
+            ref={explainerTriggerRef}
+            type="button"
+            className="explainer-trigger"
+            aria-haspopup="dialog"
+            aria-expanded={isExplainerOpen}
+            onClick={() => setIsExplainerOpen(true)}
+          >
+            <BookOpen aria-hidden="true" size={16} /> How it works
+          </button>
+          <div className="topbar-status" aria-label="Runtime status">
+            <span className={`runtime-badge ${isIncidentLoading ? "mode-loading" : `mode-${incident.evidenceMode.toLowerCase()}`}`}>
+              <Cloud aria-hidden="true" size={14} />
+              {isIncidentLoading
+                ? "Connecting lab"
+                : incident.evidenceMode === "LIVE"
+                  ? "Cloudflare lab"
+                  : "Local fixture"}
+            </span>
+            <span className={`runtime-badge webmcp-${webMcpStatus.toLowerCase()}`}>
+              <Bot aria-hidden="true" size={14} />
+              WebMCP {webMcpStatus.toLowerCase()}
+              {showsRegisteredWebMcpSurface ? " · 2 tools + 1 form" : ""}
+            </span>
+          </div>
         </div>
       </header>
 
       <main id="main-content" className="workspace" data-active-step={activeStep}>
+        <section className="product-intro" aria-labelledby="product-title">
+          <div className="product-intro-copy">
+            <p className="eyebrow">Human + agent incident recovery</p>
+            <h1 id="product-title">One live Recovery Plan. Agent prepares it. Human decides.</h1>
+            <p>
+              Incident Room uses WebMCP so a person and an agent can inspect the same failure,
+              edit the same page object, and verify the same checkout request after a guarded rollback.
+            </p>
+          </div>
+          <aside className="product-principle" aria-label="Why WebMCP matters here">
+            <strong>The shared page is the handoff.</strong>
+            <p>No hidden agent-only plan. No autonomous rollback. The visible Recovery Plan is the only shared object.</p>
+          </aside>
+          <div className="product-causal-chain" aria-label="Incident Room responsibility chain">
+            <span><Bot aria-hidden="true" size={18} /><small>Agent</small><strong>Reads evidence</strong></span>
+            <ArrowRight aria-hidden="true" size={16} />
+            <span><BookOpen aria-hidden="true" size={18} /><small>Shared page</small><strong>Drafts the plan</strong></span>
+            <ArrowRight aria-hidden="true" size={16} />
+            <span><UserRound aria-hidden="true" size={18} /><small>Human</small><strong>Edits + submits</strong></span>
+            <ArrowRight aria-hidden="true" size={16} />
+            <span><ShieldCheck aria-hidden="true" size={18} /><small>Controller</small><strong>Refuses or verifies</strong></span>
+          </div>
+        </section>
+
         <GuidedProgress
           activeStep={activeStep}
           availableStep={availableStep}
@@ -484,7 +550,7 @@ export default function App() {
               <div className="incident-icon"><AlertTriangle aria-hidden="true" size={24} /></div>
               <div>
                 <p className="eyebrow">Active incident · {incident.incidentId}</p>
-                <h1 id="stage-title-1" tabIndex={-1}>{incident.title}</h1>
+                <h2 id="stage-title-1" tabIndex={-1}>{incident.title}</h2>
                 <p>
                   {isIncidentLoading
                     ? "Reading dedicated lab health and active deployments…"
@@ -866,6 +932,73 @@ export default function App() {
           </section>
         </div>
       </main>
+
+      {isExplainerOpen && (
+        <div
+          className="explainer-backdrop"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) setIsExplainerOpen(false);
+          }}
+        >
+          <section
+            className="explainer-dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="explainer-title"
+            aria-describedby="explainer-summary"
+          >
+            <header className="explainer-header">
+              <div>
+                <p className="eyebrow">About this live rehearsal</p>
+                <h2 id="explainer-title">How Incident Room works</h2>
+              </div>
+              <button
+                ref={explainerCloseRef}
+                type="button"
+                className="explainer-close"
+                aria-label="Close How Incident Room works"
+                onClick={() => setIsExplainerOpen(false)}
+              >
+                <X aria-hidden="true" size={20} />
+              </button>
+            </header>
+
+            <p id="explainer-summary" className="explainer-summary">
+              This is a live, app-owned Cloudflare rehearsal lab. It demonstrates a guarded recovery handoff,
+              not a general production connector and not an agent acting alone.
+            </p>
+
+            <div className="explainer-responsibilities">
+              <article>
+                <Bot aria-hidden="true" size={21} />
+                <div><small>Agent</small><h3>Reads and prepares</h3></div>
+                <p>Two imperative WebMCP tools inspect live evidence and compare the suspected deployment. The agent then fills the visible Declarative Recovery Plan form.</p>
+              </article>
+              <article>
+                <UserRound aria-hidden="true" size={21} />
+                <div><small>Human</small><h3>Changes and approves</h3></div>
+                <p>The person sees every proposed value, narrows <code>scopeMode</code>, and personally submits. There is no <code>toolautosubmit</code>.</p>
+              </article>
+              <article>
+                <LockKeyhole aria-hidden="true" size={21} />
+                <div><small>Controller</small><h3>Guards and proves</h3></div>
+                <p>The Worker checks the deployment baseline and allowlist before any write. It returns <code>PLAN_STALE</code> without rollback, or verifies the same request changed from 500 to 200.</p>
+              </article>
+            </div>
+
+            <div className="explainer-faq">
+              <div>
+                <Database aria-hidden="true" size={19} />
+                <span><strong>Where does the data come from?</strong><p>Dedicated checkout and payment Cloudflare Workers owned by this app. Visitors provide no token; payment remains read-only.</p></span>
+              </div>
+              <div>
+                <ShieldCheck aria-hidden="true" size={19} />
+                <span><strong>Why use WebMCP here?</strong><p>The agent and person operate the same mounted Recovery Plan on the live page, so preparation, edits, refusal, and proof stay visible in one place.</p></span>
+              </div>
+            </div>
+          </section>
+        </div>
+      )}
     </div>
   );
 }

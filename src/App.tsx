@@ -100,6 +100,7 @@ function ServiceButton({
 }
 
 type GuidedStep = 1 | 2 | 3 | 4;
+type GettingStartedTab = "use" | "install" | "why";
 
 const guidedSteps: Array<{
   id: GuidedStep;
@@ -337,8 +338,10 @@ export default function App() {
   const formRef = useRef<HTMLFormElement>(null);
   const explainerTriggerRef = useRef<HTMLButtonElement>(null);
   const explainerCloseRef = useRef<HTMLButtonElement>(null);
+  const explainerDialogRef = useRef<HTMLElement>(null);
   const [activeStep, setActiveStep] = useState<GuidedStep>(1);
   const [isExplainerOpen, setIsExplainerOpen] = useState(false);
+  const [gettingStartedTab, setGettingStartedTab] = useState<GettingStartedTab>("use");
   const isRecoveryDisabled =
     isIncidentLoading ||
     isLabResetting ||
@@ -377,8 +380,25 @@ export default function App() {
         event.preventDefault();
         setIsExplainerOpen(false);
       } else if (event.key === "Tab") {
-        event.preventDefault();
-        explainerCloseRef.current?.focus();
+        const focusable = Array.from(
+          explainerDialogRef.current?.querySelectorAll<HTMLElement>(
+            'a[href]:not([tabindex="-1"]), button:not([disabled]):not([tabindex="-1"]), input:not([disabled]):not([tabindex="-1"]), select:not([disabled]):not([tabindex="-1"]), textarea:not([disabled]):not([tabindex="-1"]), [tabindex]:not([tabindex="-1"])',
+          ) ?? [],
+        );
+        const first = focusable[0];
+        const last = focusable.at(-1);
+        if (!first || !last) return;
+        if (event.shiftKey && (document.activeElement === first || !explainerDialogRef.current?.contains(document.activeElement))) {
+          event.preventDefault();
+          last.focus();
+        } else if (
+          !event.shiftKey &&
+          (document.activeElement === last ||
+            !explainerDialogRef.current?.contains(document.activeElement))
+        ) {
+          event.preventDefault();
+          first.focus();
+        }
       }
     };
     window.addEventListener("keydown", handleKeyDown);
@@ -502,9 +522,12 @@ export default function App() {
             className="explainer-trigger"
             aria-haspopup="dialog"
             aria-expanded={isExplainerOpen}
-            onClick={() => setIsExplainerOpen(true)}
+            onClick={() => {
+              setGettingStartedTab("use");
+              setIsExplainerOpen(true);
+            }}
           >
-            <BookOpen aria-hidden="true" size={16} /> How it works
+            <BookOpen aria-hidden="true" size={16} /> Get started
           </button>
           <div className="topbar-status" aria-label="Runtime status">
             <span className={`runtime-badge ${isIncidentLoading ? "mode-loading" : `mode-${incident.evidenceMode.toLowerCase()}`}`}>
@@ -978,6 +1001,7 @@ export default function App() {
           }}
         >
           <section
+            ref={explainerDialogRef}
             className="explainer-dialog"
             role="dialog"
             aria-modal="true"
@@ -986,14 +1010,14 @@ export default function App() {
           >
             <header className="explainer-header">
               <div>
-                <p className="eyebrow">About this live rehearsal</p>
-                <h2 id="explainer-title">How Incident Room works</h2>
+                <p className="eyebrow">Use it, run it, understand it</p>
+                <h2 id="explainer-title">Get started with Incident Room</h2>
               </div>
               <button
                 ref={explainerCloseRef}
                 type="button"
                 className="explainer-close"
-                aria-label="Close How Incident Room works"
+                aria-label="Close Get started"
                 onClick={() => setIsExplainerOpen(false)}
               >
                 <X aria-hidden="true" size={20} />
@@ -1001,42 +1025,156 @@ export default function App() {
             </header>
 
             <p id="explainer-summary" className="explainer-summary">
-              This is a live, app-owned Cloudflare rehearsal lab. It demonstrates a guarded recovery handoff,
-              not a general production connector and not an agent acting alone.
+              Complete one recovery in the hosted lab, run the project locally, or inspect how WebMCP keeps the agent and human on the same page.
             </p>
 
-            <div className="explainer-responsibilities">
-              <article>
-                <Bot aria-hidden="true" size={21} />
-                <div><small>Agent</small><h3>Reads and prepares</h3></div>
-                <p>Two imperative WebMCP tools inspect live evidence and compare the suspected deployment. The agent then fills the visible Declarative Recovery Plan form.</p>
-              </article>
-              <article>
-                <UserRound aria-hidden="true" size={21} />
-                <div><small>Human</small><h3>Changes and approves</h3></div>
-                <p>The human personally submits after reviewing every proposed value and narrowing <code>scopeMode</code>. There is no <code>toolautosubmit</code>.</p>
-              </article>
-              <article>
-                <LockKeyhole aria-hidden="true" size={21} />
-                <div><small>Controller</small><h3>Guards and proves</h3></div>
-                <p>The Worker checks the deployment baseline and allowlist before any write. It returns <code>PLAN_STALE</code> without rollback, or verifies the same request changed from 500 to 200.</p>
-              </article>
+            <div
+              className="explainer-tabs"
+              role="tablist"
+              aria-label="Getting started options"
+              onKeyDown={(event) => {
+                if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+                event.preventDefault();
+                const tabs: GettingStartedTab[] = ["use", "install", "why"];
+                const currentIndex = tabs.indexOf(gettingStartedTab);
+                const offset = event.key === "ArrowRight" ? 1 : -1;
+                const nextTab = tabs[(currentIndex + offset + tabs.length) % tabs.length];
+                setGettingStartedTab(nextTab);
+                requestAnimationFrame(() => {
+                  explainerDialogRef.current?.scrollTo?.({ top: 0 });
+                  document.getElementById(`getting-started-tab-${nextTab}`)?.focus();
+                });
+              }}
+            >
+              {([
+                ["use", "Use live demo"],
+                ["install", "Run your own"],
+                ["why", "Why WebMCP"],
+              ] as Array<[GettingStartedTab, string]>).map(([tab, label]) => (
+                <button
+                  key={tab}
+                  id={`getting-started-tab-${tab}`}
+                  type="button"
+                  role="tab"
+                  aria-selected={gettingStartedTab === tab}
+                  aria-controls={`getting-started-panel-${tab}`}
+                  tabIndex={gettingStartedTab === tab ? 0 : -1}
+                  onClick={() => {
+                    setGettingStartedTab(tab);
+                    requestAnimationFrame(() => explainerDialogRef.current?.scrollTo?.({ top: 0 }));
+                  }}
+                >
+                  {label}
+                </button>
+              ))}
             </div>
 
-            <div className="explainer-faq">
-              <div>
-                <Database aria-hidden="true" size={19} />
-                <span><strong>Where does the data come from?</strong><p>Dedicated checkout and payment Cloudflare Workers owned by this app. Visitors provide no token; payment stays read-only.</p></span>
+            {gettingStartedTab === "use" && (
+              <div
+                id="getting-started-panel-use"
+                className="explainer-panel"
+                role="tabpanel"
+                aria-labelledby="getting-started-tab-use"
+              >
+                <div className="onboarding-callout">
+                  <Cloud aria-hidden="true" size={21} />
+                  <div>
+                    <strong>You’re on the live demo.</strong>
+                    <p>No account, setup, or visitor token is required. The public rehearsal lab is shared, so another run can make an older plan stale by design.</p>
+                  </div>
+                </div>
+                <ol className="onboarding-steps">
+                  <li><span>1</span><div><strong>Use a WebMCP browser</strong><p>Open this site in ChatGPT’s in-app browser or a WebMCP-enabled Chrome browser. The status in the page header should report WebMCP ready.</p></div></li>
+                  <li><span>2</span><div><strong>Start with a verified 500</strong><p>Press <b>Start fresh rehearsal</b> and wait until checkout is degraded, payment is healthy, and the lab reports ready.</p></div></li>
+                  <li><span>3</span><div><strong>Let the agent prepare evidence</strong><p>Ask: “Inspect the current incident, compare the suspected deployment change, then prepare a Recovery Plan for me to review.” The agent calls two tools, then fills the visible Recovery Plan.</p></div></li>
+                  <li><span>4</span><div><strong>Make the human decision</strong><p>Review the mounted form, change Recovery scope to Checkout only, edit the reason if needed, then personally press Submit.</p></div></li>
+                  <li><span>5</span><div><strong>Read the proof</strong><p><code>PLAN_STALE</code> means no rollback was written. Refresh, revise, and submit again; success proves the same checkout request changes from 500 to 200.</p></div></li>
+                </ol>
               </div>
-              <div>
-                <ShieldCheck aria-hidden="true" size={19} />
-                <span><strong>Why use WebMCP here?</strong><p>The agent and person operate the same mounted Recovery Plan on the live page, so preparation, edits, refusal, and proof stay visible in one place.</p></span>
+            )}
+
+            {gettingStartedTab === "install" && (
+              <div
+                id="getting-started-panel-install"
+                className="explainer-panel"
+                role="tabpanel"
+                aria-labelledby="getting-started-tab-install"
+              >
+                <div className="install-heading">
+                  <div>
+                    <p className="eyebrow">Open source and runnable</p>
+                    <h3>Start locally in four commands</h3>
+                  </div>
+                  <a href="https://github.com/cyh7789/incident-room" target="_blank" rel="noreferrer">
+                    Open source on GitHub <ArrowRight aria-hidden="true" size={16} />
+                  </a>
+                </div>
+                <div className="install-grid">
+                  <section aria-labelledby="local-install-title">
+                    <small>Interface + local evidence</small>
+                    <h4 id="local-install-title">Run the app</h4>
+                    <pre><code>{`git clone https://github.com/cyh7789/incident-room.git
+cd incident-room
+npm install
+npm run dev`}</code></pre>
+                    <p>This starts a labelled local fixture until the Worker variables are configured. Fixture mode never claims a real rollback.</p>
+                  </section>
+                  <section aria-labelledby="worker-install-title">
+                    <small>Full Worker runtime</small>
+                    <h4 id="worker-install-title">Connect your lab</h4>
+                    <pre><code>{`cp .dev.vars.example .dev.vars
+npm run dev:worker`}</code></pre>
+                    <p>Provide two dedicated Cloudflare Workers, their allowlisted version IDs, and a server-side Workers Scripts Write token.</p>
+                  </section>
+                </div>
+                <div className="install-note">
+                  <LockKeyhole aria-hidden="true" size={19} />
+                  <p>Never expose the Cloudflare token to the browser. Keep the lab account dedicated to this demo, then follow the <a href="https://github.com/cyh7789/incident-room#prepare-the-dedicated-cloudflare-lab" target="_blank" rel="noreferrer">full setup guide</a> for variables and version uploads.</p>
+                </div>
               </div>
-              <div>
-                <LockKeyhole aria-hidden="true" size={19} />
-                <span><strong>What else can write to the lab?</strong><p>Scenario controls can prepare only allowlisted lab failures, including the competing deployment used to prove <code>PLAN_STALE</code>. Only a human-submitted Recovery Plan can write the healthy recovery target.</p></span>
+            )}
+
+            {gettingStartedTab === "why" && (
+              <div
+                id="getting-started-panel-why"
+                className="explainer-panel"
+                role="tabpanel"
+                aria-labelledby="getting-started-tab-why"
+              >
+                <p className="why-intro">This is a live, app-owned Cloudflare rehearsal lab. It demonstrates a guarded recovery handoff, not a general production connector and not an agent acting alone.</p>
+                <div className="explainer-responsibilities">
+                  <article>
+                    <Bot aria-hidden="true" size={21} />
+                    <div><small>Agent</small><h3>Reads and prepares</h3></div>
+                    <p>Two imperative WebMCP tools inspect live evidence and compare the suspected deployment. The agent then fills the visible Declarative Recovery Plan form.</p>
+                  </article>
+                  <article>
+                    <UserRound aria-hidden="true" size={21} />
+                    <div><small>Human</small><h3>Changes and approves</h3></div>
+                    <p>The human personally submits after reviewing every proposed value and narrowing <code>scopeMode</code>. There is no <code>toolautosubmit</code>.</p>
+                  </article>
+                  <article>
+                    <LockKeyhole aria-hidden="true" size={21} />
+                    <div><small>Controller</small><h3>Guards and proves</h3></div>
+                    <p>The Worker checks the deployment baseline and allowlist before any write. It returns <code>PLAN_STALE</code> without rollback, or verifies the same request changed from 500 to 200.</p>
+                  </article>
+                </div>
+                <div className="explainer-faq">
+                  <div>
+                    <Database aria-hidden="true" size={19} />
+                    <span><strong>Where does the data come from?</strong><p>Dedicated checkout and payment Cloudflare Workers owned by this app. Visitors provide no token; payment stays read-only.</p></span>
+                  </div>
+                  <div>
+                    <ShieldCheck aria-hidden="true" size={19} />
+                    <span><strong>Why use WebMCP here?</strong><p>The agent and person operate the same mounted Recovery Plan on the live page, so preparation, edits, refusal, and proof stay visible in one place.</p></span>
+                  </div>
+                  <div>
+                    <LockKeyhole aria-hidden="true" size={19} />
+                    <span><strong>What else can write to the lab?</strong><p>Scenario controls can prepare only allowlisted lab failures, including the competing deployment used to prove <code>PLAN_STALE</code>. Only a human-submitted Recovery Plan can write the healthy recovery target.</p></span>
+                  </div>
+                </div>
               </div>
-            </div>
+            )}
           </section>
         </div>
       )}

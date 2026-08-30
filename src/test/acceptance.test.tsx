@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import type { ReactElement } from "react";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 import App from "../App";
@@ -142,7 +142,7 @@ describe("Incident Room acceptance", () => {
     );
   });
 
-  test("explains the product, responsibility chain, and data boundary", async () => {
+  test("onboards people into the live demo, local install, and WebMCP boundary", async () => {
     renderApp();
 
     expect(screen.getByRole("heading", {
@@ -155,20 +155,50 @@ describe("Incident Room acceptance", () => {
     expect(screen.getByText("Edits + submits")).toBeTruthy();
     expect(screen.getByText("Checks, writes + verifies")).toBeTruthy();
 
-    const trigger = screen.getByRole("button", { name: "How it works" });
+    const trigger = screen.getByRole("button", { name: "Get started" });
     fireEvent.click(trigger);
-    expect(screen.getByRole("dialog", { name: "How Incident Room works" })).toBeTruthy();
-    expect(screen.getByText("Where does the data come from?")).toBeTruthy();
-    expect(screen.getByText(/app-owned Cloudflare rehearsal lab/i)).toBeTruthy();
-    expect(screen.getAllByText(/payment stays read-only/i).length).toBeGreaterThanOrEqual(1);
-    expect(screen.getByText(/human personally submits/i)).toBeTruthy();
-    expect(screen.getByText(/scenario controls can prepare only allowlisted lab failures/i)).toBeTruthy();
+    const dialog = screen.getByRole("dialog", { name: "Get started with Incident Room" });
+    const liveTab = within(dialog).getByRole("tab", { name: "Use live demo" });
     await waitFor(() => expect(document.activeElement?.getAttribute("aria-label")).toBe(
-      "Close How Incident Room works",
+      "Close Get started",
     ));
+    expect(liveTab.getAttribute("aria-selected")).toBe("true");
+    expect(within(dialog).getByText("You’re on the live demo.")).toBeTruthy();
+    expect(within(dialog).getByText(/start fresh rehearsal/i)).toBeTruthy();
+    expect(within(dialog).getByText(/then prepare a recovery plan for me to review/i)).toBeTruthy();
+    expect(within(dialog).getByText(/change recovery scope to checkout only/i)).toBeTruthy();
+    expect(within(dialog).getByText(/same checkout request changes from 500 to 200/i)).toBeTruthy();
 
+    liveTab.focus();
+    fireEvent.keyDown(liveTab, { key: "ArrowRight" });
+    await waitFor(() => expect(document.activeElement?.id).toBe("getting-started-tab-install"));
+    expect(within(dialog).getByRole("tab", { name: "Run your own" }).getAttribute("aria-selected")).toBe("true");
+    expect(within(dialog).getByText(/git clone https:\/\/github.com\/cyh7789\/incident-room.git/i)).toBeTruthy();
+    expect(within(dialog).getByText(/npm run dev:worker/i)).toBeTruthy();
+    expect(within(dialog).getByRole("link", { name: "Open source on GitHub" }).getAttribute("href")).toBe(
+      "https://github.com/cyh7789/incident-room",
+    );
+    expect(within(dialog).getByText(/local fixture until the Worker variables are configured/i)).toBeTruthy();
+
+    const closeButton = within(dialog).getByRole("button", { name: "Close Get started" });
+    const setupGuide = within(dialog).getByRole("link", { name: "full setup guide" });
+    closeButton.focus();
+    fireEvent.keyDown(window, { key: "Tab", shiftKey: true });
+    expect(document.activeElement).toBe(setupGuide);
+    fireEvent.keyDown(window, { key: "Tab" });
+    expect(document.activeElement).toBe(closeButton);
+    closeButton.blur();
+    expect(document.activeElement).toBe(document.body);
+    fireEvent.keyDown(window, { key: "Tab" });
+    expect(document.activeElement).toBe(closeButton);
+
+    fireEvent.click(within(dialog).getByRole("tab", { name: "Why WebMCP" }));
+    expect(within(dialog).getByText("Where does the data come from?")).toBeTruthy();
+    expect(within(dialog).getByText(/app-owned Cloudflare rehearsal lab/i)).toBeTruthy();
+    expect(within(dialog).getByText(/human personally submits/i)).toBeTruthy();
+    expect(within(dialog).getByText(/scenario controls can prepare only allowlisted lab failures/i)).toBeTruthy();
     fireEvent.keyDown(window, { key: "Escape" });
-    expect(screen.queryByRole("dialog", { name: "How Incident Room works" })).toBeNull();
+    expect(screen.queryByRole("dialog", { name: "Get started with Incident Room" })).toBeNull();
     expect(document.activeElement).toBe(trigger);
   });
 

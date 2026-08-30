@@ -4,11 +4,19 @@ Incident Room is a WebMCP-powered recovery rehearsal for a dedicated Cloudflare 
 
 ## Live demo
 
-Open [incident-room.fongse.workers.dev](https://incident-room.fongse.workers.dev/) in a WebMCP-capable browser, then press **Start fresh rehearsal**. The Controller deploys the allowlisted `checkout-broken` version and does not report READY until the fixed checkout request returns 500 while payment remains healthy. The public site uses one shared dedicated lab, so a later rehearsal can make an older Recovery Plan stale by design.
+1. Open [incident-room.fongse.workers.dev](https://incident-room.fongse.workers.dev/) in ChatGPT's in-app browser or a WebMCP-capable Chrome browser.
+2. Press **Start fresh rehearsal**. Wait until the Controller proves checkout returns 500 while payment remains healthy.
+3. Ask the agent: **Inspect the current incident, compare the suspected deployment change, then prepare a Recovery Plan for me to review.** The agent calls two read tools, then fills the visible Recovery Plan.
+4. Review the mounted form, change **Recovery scope** to **Checkout only**, edit the reason if needed, then personally press **Submit**.
+5. If the Controller returns `PLAN_STALE`, refresh the evidence, revise the plan, and submit again. Recovery succeeds only when the same fixed checkout request changes from 500 to 200.
+
+The public site uses one shared dedicated lab, so a later rehearsal can make an older Recovery Plan stale by design.
 
 ## Run locally
 
 ```bash
+git clone https://github.com/cyh7789/incident-room.git
+cd incident-room
 npm install
 npm run dev
 ```

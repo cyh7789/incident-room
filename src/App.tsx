@@ -160,8 +160,8 @@ function GuidedProgress({
     <section className={`guided-progress guided-${status.mode}`} aria-labelledby="guided-title">
       <div className="guided-progress-heading">
         <div>
-          <p className="eyebrow">Guided incident · 4 steps</p>
-          <h2 id="guided-title">Recover checkout with the agent in this tab</h2>
+          <p className="eyebrow">Live incident track</p>
+          <h2 id="guided-title">500 observed → change found → human approval → 200 verified</h2>
         </div>
         <span className="guided-count">Step {activeStep} of 4</span>
       </div>
@@ -252,31 +252,31 @@ function EvidenceConnection({
         </span>
       </div>
 
-      <div className="evidence-source-grid">
-        <article>
+      <div className="evidence-source-facts">
+        <span>
           <Cloud aria-hidden="true" size={19} />
           <div>
             <small>Data owner</small>
             <strong>App-owned sandbox</strong>
-            <p>Visitors never enter a Cloudflare API token.</p>
+            <p>No visitor token</p>
           </div>
-        </article>
-        <article>
+        </span>
+        <span>
           <Activity aria-hidden="true" size={19} />
           <div>
-            <small>Live read paths</small>
-            <strong>Health + deployments</strong>
-            <p>Service Bindings read health; the Controller reads active deployment IDs.</p>
+            <small>Live reads</small>
+            <strong>Health + deployment IDs</strong>
+            <p>Service Bindings + Controller</p>
           </div>
-        </article>
-        <article>
+        </span>
+        <span>
           <ShieldCheck aria-hidden="true" size={19} />
           <div>
             <small>Write boundary</small>
             <strong>Checkout Worker only</strong>
-            <p>Human reset or submit can write; payment remains read-only.</p>
+            <p>Payment stays read-only</p>
           </div>
-        </article>
+        </span>
       </div>
 
       <div className="evidence-source-footer">
@@ -347,7 +347,7 @@ export default function App() {
   const goToStep = useCallback((step: GuidedStep) => {
     setActiveStep(step);
     requestAnimationFrame(() => {
-      document.getElementById(`stage-title-${step}`)?.focus();
+      document.getElementById(step >= 3 ? "plan-title" : `stage-title-${step}`)?.focus();
     });
   }, []);
 
@@ -461,7 +461,7 @@ export default function App() {
           </span>
           <span className={`runtime-badge webmcp-${webMcpStatus.toLowerCase()}`}>
             <Bot aria-hidden="true" size={14} />
-            WebMCP {webMcpStatus.toLowerCase()}
+            WebMCP {webMcpStatus.toLowerCase()} · 2 tools + 1 form
           </span>
         </div>
       </header>
@@ -474,43 +474,43 @@ export default function App() {
           onStepChange={goToStep}
         />
 
-        <section className="incident-banner step-pane step-1" aria-labelledby="stage-title-1">
-          <div className="incident-icon"><AlertTriangle aria-hidden="true" size={24} /></div>
-          <div>
-            <p className="eyebrow">Active incident · {incident.incidentId}</p>
-            <h1 id="stage-title-1" tabIndex={-1}>{incident.title}</h1>
-            <p>
-              {isIncidentLoading
-                ? "Reading dedicated lab health and active deployments…"
-                : incident.health.checkout === "DEGRADED"
-                  ? "Fixed checkout request returns 500. Payment remains healthy."
-                  : "Checkout is recovered. Start a fresh rehearsal to replay the guarded rollback."}
-            </p>
-          </div>
-          <button
-            type="button"
-            className="secondary-button"
-            onClick={() => void actions.inspectCurrentIncident()}
-            disabled={isIncidentLoading || isLabResetting}
-          >
-            <RefreshCw aria-hidden="true" size={16} />
-            Refresh evidence
-          </button>
-        </section>
-
-        <div className="step-pane step-1 step-observe-source">
-          <EvidenceConnection
-            incident={incident}
-            planState={plan.state}
-            isLoading={isIncidentLoading}
-            isResetting={isLabResetting}
-            resetError={labResetError}
-            onStartFresh={startFreshRehearsal}
-          />
-        </div>
-
         <div className="workspace-grid guided-stage">
           <div className="evidence-column">
+            <section className="incident-banner step-pane step-1" aria-labelledby="stage-title-1">
+              <div className="incident-icon"><AlertTriangle aria-hidden="true" size={24} /></div>
+              <div>
+                <p className="eyebrow">Active incident · {incident.incidentId}</p>
+                <h1 id="stage-title-1" tabIndex={-1}>{incident.title}</h1>
+                <p>
+                  {isIncidentLoading
+                    ? "Reading dedicated lab health and active deployments…"
+                    : incident.health.checkout === "DEGRADED"
+                      ? "Fixed checkout request returns 500. Payment remains healthy."
+                      : "Checkout is recovered. Start a fresh rehearsal to replay the guarded rollback."}
+                </p>
+              </div>
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={() => void actions.inspectCurrentIncident()}
+                disabled={isIncidentLoading || isLabResetting}
+              >
+                <RefreshCw aria-hidden="true" size={16} />
+                Refresh evidence
+              </button>
+            </section>
+
+            <div className="step-pane step-1 step-observe-source">
+              <EvidenceConnection
+                incident={incident}
+                planState={plan.state}
+                isLoading={isIncidentLoading}
+                isResetting={isLabResetting}
+                resetError={labResetError}
+                onStartFresh={startFreshRehearsal}
+              />
+            </div>
+
             <section className="panel step-pane step-1" aria-labelledby="services-title">
               <div className="panel-heading">
                 <div>
@@ -560,12 +560,12 @@ export default function App() {
                   <p>WebMCP returns structured evidence into this same page, not a hidden agent transcript.</p>
                 </div>
               </div>
-              <div className="handoff-strip" aria-label="Agent evidence handoff">
-                <span><Bot aria-hidden="true" size={18} /><strong>Agent</strong><small>Calls read tool</small></span>
-                <ArrowRight aria-hidden="true" size={18} />
-                <span><Activity aria-hidden="true" size={18} /><strong>WebMCP</strong><small>Returns change</small></span>
-                <ArrowRight aria-hidden="true" size={18} />
-                <span><GitCompareArrows aria-hidden="true" size={18} /><strong>Live page</strong><small>Shows evidence</small></span>
+              <div className={`inline-tool-activity ${selectedChange ? "is-complete" : ""}`} role="status">
+                <Bot aria-hidden="true" size={17} />
+                <span>
+                  <strong>{selectedChange ? "Agent called show_change_comparison" : "Waiting for show_change_comparison"}</strong>
+                  <small>{selectedChange ? "Live page updated with deployment evidence" : "The result will appear in this shared canvas"}</small>
+                </span>
               </div>
               <div className="panel-heading">
                 <div>
@@ -623,31 +623,58 @@ export default function App() {
 
           <section className="recovery-plan step-pane step-shared" aria-labelledby="plan-title">
             <div className="plan-accent" />
-            <div className="stage-title-block recovery-stage-title">
-              <span className="stage-number">{activeStep === 4 ? "04" : "03"}</span>
-              <div>
-                <p className="eyebrow">{activeStep === 4 ? "Controller verifies" : "Agent drafts · Human decides"}</p>
-                <h2 id={`stage-title-${activeStep === 4 ? 4 : 3}`} tabIndex={-1}>
-                  {activeStep === 4 ? "Verify the guarded recovery" : "Approve the smallest safe plan"}
-                </h2>
-                <p>
-                  {activeStep === 4
-                    ? "The visible receipt distinguishes a refused stale plan from a verified rollback."
-                    : "The agent prepares this live form, then stops for your edit and explicit Submit."}
-                </p>
-              </div>
-            </div>
             <div className="panel-heading plan-heading">
               <div>
-                <p className="eyebrow">WebMCP shared page object</p>
-                <h2 id="plan-title">Recovery Plan</h2>
+                <p className="eyebrow">Shared live page object</p>
+                <h2 id="plan-title" tabIndex={-1}>Recovery Plan</h2>
               </div>
               <StatePill state={plan.state} />
             </div>
 
-            <div className="plan-interface-strip step-3-only" aria-label="Recovery Plan interface">
-              <span className="interface-chip chip-agent"><Bot aria-hidden="true" size={15} /> Agent drafts</span>
-              <span className="interface-chip chip-shared">Declarative form · Live DOM</span>
+            <div className="canvas-context" aria-live="polite">
+              <span>{String(activeStep).padStart(2, "0")}</span>
+              <div>
+                <strong>
+                  {activeStep === 1
+                    ? "Observe before drafting"
+                    : activeStep === 2
+                      ? "Attach the verified change"
+                      : activeStep === 3
+                        ? "Agent drafts, human decides"
+                        : "Controller returns visible proof"}
+                </strong>
+                <p>
+                  {activeStep === 1
+                    ? "The plan stays empty until live incident evidence is visible."
+                    : activeStep === 2
+                      ? "The deployment comparison becomes the context for this same plan."
+                      : activeStep === 3
+                        ? "Edit scopeMode in this page and personally Submit the final state."
+                        : "A stale refusal and a verified rollback remain attached to this plan."}
+                </p>
+              </div>
+            </div>
+
+            <div className="plan-awaiting plan-setup-only">
+              <Bot aria-hidden="true" size={22} />
+              <div>
+                <strong>{activeStep === 1 ? "Recovery Plan not drafted yet" : "Change context ready for the plan"}</strong>
+                <p>
+                  {activeStep === 1
+                    ? "Inspect the live 500 and healthy payment service first."
+                    : "Open the suspected change, then continue to let the agent prepare this live form."}
+                </p>
+              </div>
+              <dl>
+                <div><dt>Scope</dt><dd>Agent draft pending</dd></div>
+                <div><dt>Target</dt><dd>Allowlisted checkout version</dd></div>
+                <div><dt>Submit</dt><dd>Human only</dd></div>
+              </dl>
+            </div>
+
+            <div className="plan-collaboration-note step-3-only" aria-label="Recovery Plan interface">
+              <Bot aria-hidden="true" size={17} />
+              <span><strong>Agent prepared this live form</strong><small>You can see every value, change the scope, and decide whether to Submit.</small></span>
             </div>
 
             <form
@@ -660,7 +687,7 @@ export default function App() {
               <div className="form-group">
                 <div className="field-label-line">
                   <label htmlFor="scopeMode">Recovery scope</label>
-                  <span className="decision-badge">Human decision required</span>
+                  <span className="field-activity"><Bot aria-hidden="true" size={13} /> Agent proposed · <strong>Human decides</strong></span>
                 </div>
                 <select
                   id="scopeMode"
@@ -676,7 +703,10 @@ export default function App() {
               </div>
 
               <div className="form-group">
-                <label htmlFor="targetVersion">Target version</label>
+                <div className="field-label-line">
+                  <label htmlFor="targetVersion">Target version</label>
+                  <span className="field-activity"><ShieldCheck aria-hidden="true" size={13} /> Controller allowlist</span>
+                </div>
                 <select
                   id="targetVersion"
                   name="targetVersion"
@@ -689,7 +719,10 @@ export default function App() {
               </div>
 
               <div className="form-group">
-                <label htmlFor="reason">Reason</label>
+                <div className="field-label-line">
+                  <label htmlFor="reason">Reason</label>
+                  <span className="field-activity"><Bot aria-hidden="true" size={13} /> Agent drafted</span>
+                </div>
                 <textarea
                   id="reason"
                   name="reason"
@@ -727,12 +760,9 @@ export default function App() {
               </p>
             </form>
 
-            <div className="verification-path step-4-only" aria-label="Verification path">
-              <span><UserRound aria-hidden="true" size={18} /><strong>Approved page</strong><small>Exact scope</small></span>
-              <ArrowRight aria-hidden="true" size={18} />
-              <span><ShieldCheck aria-hidden="true" size={18} /><strong>Stale gate</strong><small>Before write</small></span>
-              <ArrowRight aria-hidden="true" size={18} />
-              <span><CheckCircle2 aria-hidden="true" size={18} /><strong>Health proof</strong><small>Same request</small></span>
+            <div className="inline-controller-activity step-4-only" aria-label="Verification path">
+              <ShieldCheck aria-hidden="true" size={17} />
+              <span><strong>Approved page → stale gate → rollback write → same request</strong><small>The Controller checks current deployment before any write.</small></span>
             </div>
 
             <div className="result-area step-4-only" aria-live="polite">

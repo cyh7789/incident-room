@@ -70,7 +70,7 @@ describe("Incident Room acceptance", () => {
       screen.getByRole("heading", { name: "Dedicated Cloudflare rehearsal lab" }),
     ).toBeTruthy();
     expect(screen.getByText("App-owned sandbox")).toBeTruthy();
-    expect(screen.getByText("Visitors never enter a Cloudflare API token.")).toBeTruthy();
+    expect(screen.getByText("No visitor token")).toBeTruthy();
     expect(screen.getByText("Ready · checkout 500")).toBeTruthy();
   });
 
@@ -167,7 +167,11 @@ describe("Incident Room acceptance", () => {
     const form = view.container.querySelector(
       'form[toolname="prepare_recovery_rehearsal"]',
     ) as HTMLFormElement;
-    expect(screen.getByRole("heading", { name: "Recover checkout with the agent in this tab" })).toBeTruthy();
+    expect(screen.getByRole("heading", {
+      name: "500 observed → change found → human approval → 200 verified",
+    })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Recovery Plan" })).toBeTruthy();
+    expect(screen.getByText("Recovery Plan not drafted yet")).toBeTruthy();
     expect(screen.getByRole("button", { name: /step 1: observe/i }).getAttribute("aria-current")).toBe("step");
     expect(main.getAttribute("data-active-step")).toBe("1");
     expect(view.container.contains(form)).toBe(true);

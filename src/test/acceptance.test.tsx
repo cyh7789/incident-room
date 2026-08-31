@@ -107,7 +107,8 @@ describe("Incident Room acceptance", () => {
     const view = renderApp();
     await waitFor(() => expect(screen.getByText("Ready · checkout 500")).toBeTruthy());
 
-    const startButton = screen.getByRole("button", { name: "Start fresh rehearsal" });
+    const labCard = screen.getByRole("region", { name: "Dedicated Cloudflare rehearsal lab" });
+    const startButton = within(labCard).getByRole("button", { name: "Start 100-second demo" });
     expect(startButton.closest("[toolname]")).toBeNull();
     fireEvent.click(startButton);
 
@@ -162,7 +163,10 @@ describe("Incident Room acceptance", () => {
       level: 1,
       name: "One live Recovery Plan. Agent prepares it. Human decides.",
     })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Start 100-second demo" })).toBeTruthy();
+    const productIntro = screen.getByRole("region", {
+      name: "One live Recovery Plan. Agent prepares it. Human decides.",
+    });
+    expect(within(productIntro).getByRole("button", { name: "Start 100-second demo" })).toBeTruthy();
     expect(screen.getByText("500 observed")).toBeTruthy();
     expect(screen.getByText("PLAN_STALE if superseded · no write")).toBeTruthy();
     expect(screen.getByText("200 verified")).toBeTruthy();
@@ -177,7 +181,7 @@ describe("Incident Room acceptance", () => {
     expect(liveTab.getAttribute("aria-selected")).toBe("true");
     expect(within(dialog).getByText("You’re on the live demo.")).toBeTruthy();
     expect(within(dialog).getByRole("list", { name: "100-second recovery walkthrough" }).children).toHaveLength(3);
-    expect(within(dialog).getByText(/start fresh rehearsal/i)).toBeTruthy();
+    expect(within(dialog).getByText(/start 100-second demo/i)).toBeTruthy();
     expect(within(dialog).getByText(/then prepare a recovery plan for me to review/i)).toBeTruthy();
     expect(within(dialog).getByText(/change recovery scope to checkout only/i)).toBeTruthy();
     expect(within(dialog).getByText(/Base: 500.*rollback.*200.*deployment changes first.*PLAN_STALE.*no write/i)).toBeTruthy();
@@ -451,7 +455,7 @@ describe("Incident Room acceptance", () => {
     expect(screen.getByText("Recovered · restart to replay")).toBeTruthy();
     expect(
       (screen.getByRole("button", {
-        name: "Start fresh rehearsal first",
+        name: "Start 100-second demo first",
       }) as HTMLButtonElement).disabled,
     ).toBe(true);
     expect(incidentReads).toBe(3);

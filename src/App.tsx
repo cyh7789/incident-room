@@ -306,7 +306,7 @@ function EvidenceConnection({
           disabled={isLoading || isResetting}
         >
           <RefreshCw className={isResetting ? "spin" : undefined} aria-hidden="true" size={16} />
-          {isResetting ? "Preparing clean rehearsal…" : "Start fresh rehearsal"}
+          {isResetting ? "Starting demo…" : "Start 100-second demo"}
         </button>
       </div>
       {resetError && <p className="source-error" role="alert">{resetError}</p>}
@@ -917,7 +917,7 @@ export default function App() {
                 {plan.state === "SUBMITTING" ? (
                   <><RefreshCw className="spin" aria-hidden="true" size={17} /> Running rehearsal…</>
                 ) : plan.state === "RECOVERED" || incident.health.checkout !== "DEGRADED" ? (
-                  <><RefreshCw aria-hidden="true" size={17} /> Start fresh rehearsal first</>
+                  <><RefreshCw aria-hidden="true" size={17} /> Start 100-second demo first</>
                 ) : (
                   <><ShieldCheck aria-hidden="true" size={17} /> Human approval · Run recovery rehearsal</>
                 )}
@@ -1117,7 +1117,7 @@ export default function App() {
                   </div>
                 </div>
                 <ol className="onboarding-steps" aria-label="100-second recovery walkthrough">
-                  <li><span>1</span><div><strong>Start with a verified 500</strong><p>Press <b>Start fresh rehearsal</b>. The lab proves checkout is degraded while payment remains healthy.</p></div></li>
+                  <li><span>1</span><div><strong>Start with a verified 500</strong><p>Press <b>Start 100-second demo</b>. The lab proves checkout is degraded while payment remains healthy.</p></div></li>
                   <li><span>2</span><div><strong>Ask the agent</strong><p>In ChatGPT’s in-app browser or WebMCP-enabled Chrome, ask: “Inspect the current incident, compare the suspected deployment change, then prepare a Recovery Plan for me to review.” The two read tools update this page.</p></div></li>
                   <li><span>3</span><div><strong>Make the human decision</strong><p>Change Recovery scope to Checkout only, review the reason, and personally press Submit.</p></div></li>
                 </ol>

@@ -1,6 +1,7 @@
 export type ServiceId = "checkout" | "payment";
 export type HealthStatus = "HEALTHY" | "DEGRADED" | "UNKNOWN";
 export type EvidenceMode = "LIVE" | "FIXTURE";
+export type EvidenceSourceMode = "BUILT_IN_LAB" | "SELF_HOSTED" | "LOCAL_FIXTURE";
 export type ScopeMode = "checkout" | "checkout_and_payment";
 export type PlanState =
   | "EMPTY"
@@ -32,6 +33,13 @@ export interface IncidentSummary {
   suspectedChangeIds: string[];
   evidenceGaps: string[];
   evidenceMode: EvidenceMode;
+  evidenceSource: {
+    mode: EvidenceSourceMode;
+    label: string;
+    services: Record<ServiceId, string>;
+    readTransport: "Cloudflare Service Bindings" | "No live transport";
+    deploymentTransport: "Cloudflare Workers Deployments API" | "No deployment transport";
+  };
 }
 
 export interface LabResetResult {
@@ -105,6 +113,16 @@ export const FIXTURE_INCIDENT: IncidentSummary = {
   suspectedChangeIds: ["change-checkout-broken"],
   evidenceGaps: ["Live Cloudflare lab is not configured in this environment."],
   evidenceMode: "FIXTURE",
+  evidenceSource: {
+    mode: "LOCAL_FIXTURE",
+    label: "Local fixture",
+    services: {
+      checkout: "fixture-checkout",
+      payment: "fixture-payment",
+    },
+    readTransport: "No live transport",
+    deploymentTransport: "No deployment transport",
+  },
 };
 
 export function changeForIncident(incident: IncidentSummary): ChangeComparison {

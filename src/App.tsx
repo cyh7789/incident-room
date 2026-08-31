@@ -335,6 +335,8 @@ function EvidenceConnection({
   resetError: string | null;
 }) {
   const isRecovered = planState === "RECOVERED";
+  const isFixture = incident.evidenceMode === "FIXTURE";
+  const isSelfHosted = !isFixture && incident.evidenceSource.mode === "SELF_HOSTED";
   const isReady =
     !isRecovered && incident.evidenceMode === "LIVE" && incident.health.checkout === "DEGRADED";
   const status = isLoading
@@ -354,7 +356,7 @@ function EvidenceConnection({
       <div className="evidence-source-heading">
         <div>
           <p className="eyebrow">Connected evidence</p>
-          <h2 id="evidence-source-title">Dedicated Cloudflare rehearsal lab</h2>
+          <h2 id="evidence-source-title">{incident.evidenceSource.label}</h2>
         </div>
         <span className={`source-state ${isReady ? "is-ready" : ""}`}>
           <CircleDot aria-hidden="true" size={14} /> {status}
@@ -366,33 +368,71 @@ function EvidenceConnection({
           <Cloud aria-hidden="true" size={19} />
           <div>
             <small>Data owner</small>
-            <strong>App-owned sandbox</strong>
-            <p>No visitor token</p>
+            <strong>
+              {isFixture
+                ? "Browser-only sample"
+                : isSelfHosted
+                  ? "Configured Cloudflare account"
+                  : "App-owned sandbox"}
+            </strong>
+            <p>
+              <span>
+                {isFixture
+                  ? "No account connection"
+                  : `${incident.evidenceSource.services.checkout} + ${incident.evidenceSource.services.payment}`}
+              </span>
+              {!isSelfHosted && <span>No visitor token</span>}
+            </p>
           </div>
         </div>
         <div>
           <Activity aria-hidden="true" size={19} />
           <div>
-            <small>Live reads</small>
-            <strong>Health + deployment IDs</strong>
-            <p>Service Bindings + Controller</p>
+            <small>{isFixture ? "Sample evidence" : "Live reads"}</small>
+            <strong>{isFixture ? "No live reads" : "Health + fixed probe"}</strong>
+            <p>{incident.evidenceSource.readTransport}</p>
           </div>
         </div>
         <div>
           <ShieldCheck aria-hidden="true" size={19} />
           <div>
             <small>Write boundary</small>
-            <strong>Checkout Worker only</strong>
-            <p>Payment stays read-only</p>
+            <strong>{isFixture ? "No writes available" : "Checkout Worker only"}</strong>
+            <p>{isFixture ? "Fixture cannot report recovery" : "Payment stays read-only"}</p>
           </div>
         </div>
       </div>
+
+      {isFixture ? (
+        <div className="evidence-path fixture-path" aria-label="Local fixture boundary">
+          <small>Local-only fallback</small>
+          <p>No Cloudflare read or deployment write occurred. Configure the Worker bindings to run the live proof.</p>
+        </div>
+      ) : (
+        <div className="evidence-path" aria-label="Synchronous evidence path">
+          <small>Synchronous proof path</small>
+          <ol>
+            <li><strong>Bound Workers</strong><span>checkout + payment</span></li>
+            <ArrowRight aria-hidden="true" size={14} />
+            <li><strong>GET /health + POST /checkout</strong><span>live status + fixed probe</span></li>
+            <ArrowRight aria-hidden="true" size={14} />
+            <li><strong>Workers Deployments API</strong><span>version evidence + guarded write</span></li>
+            <ArrowRight aria-hidden="true" size={14} />
+            <li><strong>Recovery Plan</strong><span>one shared page object</span></li>
+          </ol>
+          <p>No log server is required for this synchronous proof. Workers Logs stay secondary evidence.</p>
+        </div>
+      )}
 
       <div className="evidence-source-footer">
         <div className="shared-lab-note">
           <AlertTriangle aria-hidden="true" size={16} />
           <span>
-            Shared public lab. A later rehearsal can make your plan stale; the write gate will refuse it.
+            {isFixture
+              ? "Local fixture. No live Cloudflare read or deployment write occurred."
+              : isSelfHosted
+                ? "Self-hosted source. A newer checkout deployment can make your plan stale; the write gate will refuse it."
+                : "Shared public lab. A later rehearsal can make your plan stale; the write gate will refuse it."}
             {!isLoading && (
               <> Last checked <time dateTime={incident.checkedAt}>{formatCheckedAt(incident.checkedAt)} Asia/Taipei</time>.</>
             )}
@@ -1314,15 +1354,26 @@ npm run dev`}</code></pre>
                   </section>
                   <section aria-labelledby="worker-install-title">
                     <small>Full Worker runtime</small>
-                    <h4 id="worker-install-title">Connect your lab</h4>
+                    <h4 id="worker-install-title">Connect your Workers</h4>
                     <pre><code>{`cp .dev.vars.example .dev.vars
 npm run dev:worker`}</code></pre>
-                    <p>Provide two dedicated Cloudflare Workers, their allowlisted version IDs, and a server-side Workers Scripts Write token.</p>
+                    <p>Bind your own checkout and payment Workers, then provide their names, allowlisted version IDs, and a server-side Workers Scripts Write token.</p>
                   </section>
+                </div>
+                <div className="connection-contract">
+                  <div>
+                    <p className="eyebrow">Connection contract</p>
+                    <strong>Deployment configuration only. No Incident Room core code changes.</strong>
+                  </div>
+                  <ul>
+                    <li><code>GET /health</code> on checkout and payment returns service status plus the active version ID.</li>
+                    <li><code>POST /checkout</code> runs the deterministic checkout probe and returns its real HTTP status.</li>
+                    <li>Cloudflare Deployments API reads both deployment IDs and can write only the configured checkout Worker.</li>
+                  </ul>
                 </div>
                 <div className="install-note">
                   <LockKeyhole aria-hidden="true" size={19} />
-                  <p>Never expose the Cloudflare token to the browser. Keep the lab account dedicated to this demo, then follow the <a href="https://github.com/cyh7789/incident-room#prepare-the-dedicated-cloudflare-lab" target="_blank" rel="noreferrer">full setup guide</a> for variables and version uploads.</p>
+                  <p>Never expose the Cloudflare token to the browser. Use a dedicated account for this recovery boundary; Controller code writes only the configured checkout Worker. Follow the <a href="https://github.com/cyh7789/incident-room#connect-your-own-cloudflare-workers" target="_blank" rel="noreferrer">connection guide</a> for bindings, variables, and version allowlists.</p>
                 </div>
               </div>
             )}

@@ -43,6 +43,16 @@ const liveIncident: IncidentSummary = {
   suspectedChangeIds: ["change-broken-version-id"],
   evidenceGaps: ["Telemetry unavailable"],
   evidenceMode: "LIVE",
+  evidenceSource: {
+    mode: "BUILT_IN_LAB",
+    label: "Dedicated Cloudflare rehearsal lab",
+    services: {
+      checkout: "incident-room-checkout",
+      payment: "incident-room-payment",
+    },
+    readTransport: "Cloudflare Service Bindings",
+    deploymentTransport: "Cloudflare Workers Deployments API",
+  },
 };
 
 const healthyIncident: IncidentSummary = {
@@ -60,6 +70,16 @@ function jsonResponse(body: unknown, status = 200): Response {
     status,
     headers: { "Content-Type": "application/json" },
   });
+}
+
+function serviceBinding(
+  fetcher: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>,
+) {
+  return {
+    fetch(request: Request) {
+      return fetcher(request.url, { method: request.method });
+    },
+  };
 }
 
 beforeEach(() => {
@@ -86,6 +106,9 @@ describe("Incident Room acceptance", () => {
     ).toBeTruthy();
     expect(screen.getByText("App-owned sandbox")).toBeTruthy();
     expect(screen.getByText("No visitor token")).toBeTruthy();
+    expect(screen.getByText("GET /health + POST /checkout")).toBeTruthy();
+    expect(screen.getByText("Workers Deployments API")).toBeTruthy();
+    expect(screen.getByText(/No log server is required for this synchronous proof/i)).toBeTruthy();
     expect(screen.getByText("Ready · checkout 500")).toBeTruthy();
   });
 
@@ -233,9 +256,11 @@ describe("Incident Room acceptance", () => {
       "https://github.com/cyh7789/incident-room",
     );
     expect(within(dialog).getByText(/local fixture until the Worker variables are configured/i)).toBeTruthy();
+    expect(within(dialog).getByText(/bind your own checkout and payment Workers/i)).toBeTruthy();
+    expect(within(dialog).getByText(/no Incident Room core code changes/i)).toBeTruthy();
 
     const closeButton = within(dialog).getByRole("button", { name: "Close Get started" });
-    const setupGuide = within(dialog).getByRole("link", { name: "full setup guide" });
+    const setupGuide = within(dialog).getByRole("link", { name: "connection guide" });
     closeButton.focus();
     fireEvent.keyDown(window, { key: "Tab", shiftKey: true });
     expect(document.activeElement).toBe(setupGuide);
@@ -638,6 +663,266 @@ describe("Incident Room acceptance", () => {
     expect(harness.signals.every((signal) => signal.aborted)).toBe(true);
   });
 
+  test("server/connects configured Cloudflare Workers without core changes", async () => {
+    let checkoutRecovered = false;
+    const checkoutService = {
+      fetch: vi.fn(async (request: Request) => {
+        const url = new URL(request.url);
+        if (url.pathname === "/health") {
+          return jsonResponse({
+            serviceId: "checkout",
+            status: checkoutRecovered ? "HEALTHY" : "DEGRADED",
+            versionId: checkoutRecovered
+              ? "acme-checkout-healthy-version"
+              : "acme-checkout-broken-version",
+            versionTag: checkoutRecovered ? "checkout-healthy" : "checkout-broken",
+            checkedAt: "2026-08-31T03:00:00Z",
+          });
+        }
+        if (url.pathname === "/checkout") {
+          return new Response(checkoutRecovered ? "healthy" : "broken", {
+            status: checkoutRecovered ? 200 : 500,
+          });
+        }
+        return new Response("Not found", { status: 404 });
+      }),
+    };
+    const paymentService = {
+      fetch: vi.fn(async (request: Request) => {
+        if (new URL(request.url).pathname === "/health") {
+          return jsonResponse({
+            serviceId: "payment",
+            status: "HEALTHY",
+            versionId: "acme-payment-healthy-version",
+            versionTag: "payment-healthy",
+            checkedAt: "2026-08-31T03:00:00Z",
+          });
+        }
+        return new Response("Not found", { status: 404 });
+      }),
+    };
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.includes("acme-checkout-api/deployments")) {
+        if (init?.method === "POST") {
+          checkoutRecovered = true;
+          return jsonResponse({
+            success: true,
+            result: {
+              id: "acme-rollback-deployment",
+              created_on: "2026-08-31T03:01:00Z",
+              versions: [{ percentage: 100, version_id: "acme-checkout-healthy-version" }],
+            },
+          });
+        }
+        return jsonResponse({
+          success: true,
+          result: {
+            deployments: [{
+              id: "acme-checkout-deployment",
+              created_on: "2026-08-31T02:58:00Z",
+              versions: [{ percentage: 100, version_id: "acme-checkout-broken-version" }],
+            }],
+          },
+        });
+      }
+      if (url.includes("acme-payment-api/deployments")) {
+        return jsonResponse({
+          success: true,
+          result: {
+            deployments: [{
+              id: "acme-payment-deployment",
+              created_on: "2026-08-31T02:57:00Z",
+              versions: [{ percentage: 100, version_id: "acme-payment-healthy-version" }],
+            }],
+          },
+        });
+      }
+      throw new Error(`Unexpected request: ${url}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const env: Env = {
+      CLOUDFLARE_ACCOUNT_ID: "acme-account",
+      CLOUDFLARE_API_TOKEN: "server-only-token",
+      CHECKOUT_WORKER_NAME: "acme-checkout-api",
+      PAYMENT_WORKER_NAME: "acme-payment-api",
+      CHECKOUT_BASE_URL: "https://checkout.internal",
+      PAYMENT_BASE_URL: "https://payment.internal",
+      CHECKOUT_BROKEN_VERSION_ID: "acme-checkout-broken-version",
+      CHECKOUT_HEALTHY_VERSION_ID: "acme-checkout-healthy-version",
+      CHECKOUT_CONCURRENT_VERSION_ID: "acme-checkout-concurrent-version",
+      PAYMENT_HEALTHY_VERSION_ID: "acme-payment-healthy-version",
+      INCIDENT_ID: "INC-ACME-042",
+      INCIDENT_TITLE: "Acme checkout requests failing after deployment",
+      EVIDENCE_SOURCE_MODE: "SELF_HOSTED",
+      EVIDENCE_SOURCE_LABEL: "Acme recovery source",
+      CHECKOUT_SERVICE: checkoutService,
+      PAYMENT_SERVICE: paymentService,
+    };
+
+    const response = await worker.fetch(
+      new Request("https://incident-room.test/api/incident/current"),
+      env,
+    );
+    const incident = (await response.json()) as IncidentSummary;
+
+    expect(response.status).toBe(200);
+    expect(incident).toMatchObject({
+      incidentId: "INC-ACME-042",
+      title: "Acme checkout requests failing after deployment",
+      health: { checkout: "DEGRADED", payment: "HEALTHY" },
+      activeDeployments: {
+        checkout: "acme-checkout-deployment",
+        payment: "acme-payment-deployment",
+      },
+      evidenceSource: {
+        mode: "SELF_HOSTED",
+        label: "Acme recovery source",
+        services: {
+          checkout: "acme-checkout-api",
+          payment: "acme-payment-api",
+        },
+        readTransport: "Cloudflare Service Bindings",
+        deploymentTransport: "Cloudflare Workers Deployments API",
+      },
+    });
+    expect(checkoutService.fetch).toHaveBeenCalledOnce();
+    expect(paymentService.fetch).toHaveBeenCalledOnce();
+    expect(fetchMock.mock.calls.map(([input]) => String(input))).toEqual([
+      expect.stringContaining("acme-checkout-api/deployments"),
+      expect.stringContaining("acme-payment-api/deployments"),
+    ]);
+
+    const recoveryResponse = await worker.fetch(
+      recoveryRequest({
+        incidentId: "INC-ACME-042",
+        observedDeploymentId: "acme-checkout-deployment",
+      }),
+      env,
+    );
+    const recovery = (await recoveryResponse.json()) as RecoveryResult;
+
+    expect(recovery).toMatchObject({
+      status: "RECOVERED",
+      currentDeploymentId: "acme-checkout-deployment",
+      executionDeploymentId: "acme-rollback-deployment",
+      healthBefore: 500,
+      healthAfter: 200,
+    });
+    const deploymentWrites = fetchMock.mock.calls.filter(
+      ([input, init]) => String(input).includes("/deployments") && init?.method === "POST",
+    );
+    expect(deploymentWrites).toHaveLength(1);
+    expect(String(deploymentWrites[0][0])).toContain("acme-checkout-api/deployments");
+    expect(String(deploymentWrites[0][0])).not.toContain("acme-payment-api");
+    expect(JSON.parse(String(deploymentWrites[0][1]?.body))).toMatchObject({
+      versions: [{ percentage: 100, version_id: "acme-checkout-healthy-version" }],
+      annotations: { "workers/message": "Recovery rehearsal for INC-ACME-042" },
+    });
+  });
+
+  test("server/refuses to misreport missing Service Bindings", async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    const response = await worker.fetch(
+      new Request("https://incident-room.test/api/incident/current"),
+      {
+        CHECKOUT_WORKER_NAME: "acme-checkout-api",
+        PAYMENT_WORKER_NAME: "acme-payment-api",
+        CHECKOUT_BASE_URL: "https://checkout.internal",
+        PAYMENT_BASE_URL: "https://payment.internal",
+      },
+    );
+
+    expect(response.status).toBe(503);
+    expect(await response.json()).toEqual({
+      message: "Missing server configuration: CHECKOUT_SERVICE",
+    });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  test("self-hosted source does not claim to be the shared public lab", async () => {
+    const selfHostedIncident: IncidentSummary = {
+      ...liveIncident,
+      evidenceSource: {
+        ...liveIncident.evidenceSource,
+        mode: "SELF_HOSTED",
+        label: "Acme recovery source",
+        services: {
+          checkout: "acme-checkout-api",
+          payment: "acme-payment-api",
+        },
+      },
+    };
+    vi.stubGlobal("fetch", vi.fn(async () => jsonResponse(selfHostedIncident)));
+    renderApp();
+
+    await waitFor(() => expect(screen.getByRole("heading", {
+      name: "Acme recovery source",
+    })).toBeTruthy());
+    expect(screen.getByText("Configured Cloudflare account")).toBeTruthy();
+    expect(screen.getByText(/Self-hosted source.*newer checkout deployment.*write gate/i)).toBeTruthy();
+    expect(screen.queryByText(/Shared public lab/i)).toBeNull();
+  });
+
+  test("local fixture does not claim live Cloudflare evidence", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => {
+      throw new Error("Controller unavailable");
+    }));
+    renderApp();
+
+    await waitFor(() => expect(screen.getByRole("heading", {
+      name: "Local fixture",
+    })).toBeTruthy());
+    expect(screen.getByText("Browser-only sample")).toBeTruthy();
+    expect(screen.getByText("No live transport")).toBeTruthy();
+    expect(screen.getByText(/No Cloudflare read or deployment write occurred/i)).toBeTruthy();
+    expect(screen.queryByText("Cloudflare Service Bindings")).toBeNull();
+    expect(screen.queryByText("Workers Deployments API")).toBeNull();
+    expect(screen.queryByText(/Shared public lab/i)).toBeNull();
+  });
+
+  test("server/refuses invalid Worker identity before a recovery write", async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    const response = await worker.fetch(
+      recoveryRequest(),
+      {
+        CHECKOUT_WORKER_NAME: "same-worker",
+        PAYMENT_WORKER_NAME: "same-worker",
+        CHECKOUT_BASE_URL: "https://checkout.internal",
+        CHECKOUT_HEALTHY_VERSION_ID: "healthy-version-id",
+      },
+    );
+
+    expect(response.status).toBe(503);
+    expect(await response.json()).toEqual({
+      message: "Invalid server configuration: checkout and payment must use different Workers.",
+    });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  test("server/refuses invalid evidence mode before any source read", async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    const response = await worker.fetch(
+      new Request("https://incident-room.test/api/incident/current"),
+      {
+        CHECKOUT_WORKER_NAME: "acme-checkout-api",
+        PAYMENT_WORKER_NAME: "acme-payment-api",
+        CHECKOUT_BASE_URL: "https://checkout.internal",
+        PAYMENT_BASE_URL: "https://payment.internal",
+        EVIDENCE_SOURCE_MODE: "SELFHOSTED",
+      },
+    );
+
+    expect(response.status).toBe(503);
+    expect(await response.json()).toEqual({
+      message: "Invalid server configuration: EVIDENCE_SOURCE_MODE must be BUILT_IN_LAB or SELF_HOSTED.",
+    });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   test("server/allowlisted-target-only", async () => {
     const fetchMock = vi.fn();
     vi.stubGlobal("fetch", fetchMock);
@@ -668,6 +953,22 @@ describe("Incident Room acceptance", () => {
     expect(response.status).toBe(403);
     expect(await response.json()).toEqual({
       message: "Fresh rehearsal requires the same-origin human action header.",
+    });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  test("server/competing-deployment-requires-human-action-header", async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    const response = await worker.fetch(
+      new Request("https://incident-room.test/api/lab/competing-deployment", {
+        method: "POST",
+      }),
+      {},
+    );
+    expect(response.status).toBe(403);
+    expect(await response.json()).toEqual({
+      message: "Competing deployment requires the same-origin human action header.",
     });
     expect(fetchMock).not.toHaveBeenCalled();
   });
@@ -746,6 +1047,8 @@ describe("Incident Room acceptance", () => {
       CHECKOUT_HEALTHY_VERSION_ID: "healthy-version-id",
       CHECKOUT_CONCURRENT_VERSION_ID: "concurrent-version-id",
       PAYMENT_HEALTHY_VERSION_ID: "payment-version-id",
+      CHECKOUT_SERVICE: serviceBinding(fetchMock),
+      PAYMENT_SERVICE: serviceBinding(fetchMock),
     };
     const response = await worker.fetch(
       new Request("https://incident-room.test/api/lab/reset", {
@@ -798,8 +1101,10 @@ describe("Incident Room acceptance", () => {
       CLOUDFLARE_ACCOUNT_ID: "account-id",
       CLOUDFLARE_API_TOKEN: "test-token",
       CHECKOUT_WORKER_NAME: "incident-room-checkout",
+      PAYMENT_WORKER_NAME: "incident-room-payment",
       CHECKOUT_BASE_URL: "https://checkout.test",
       CHECKOUT_HEALTHY_VERSION_ID: "healthy-version-id",
+      CHECKOUT_SERVICE: serviceBinding(fetchMock),
     };
     const response = await worker.fetch(
       recoveryRequest({ observedDeploymentId: "broken-deployment" }),
@@ -839,8 +1144,10 @@ describe("Incident Room acceptance", () => {
       CLOUDFLARE_ACCOUNT_ID: "account-id",
       CLOUDFLARE_API_TOKEN: "test-token",
       CHECKOUT_WORKER_NAME: "incident-room-checkout",
+      PAYMENT_WORKER_NAME: "incident-room-payment",
       CHECKOUT_BASE_URL: "https://checkout.test",
       CHECKOUT_HEALTHY_VERSION_ID: "healthy-version-id",
+      CHECKOUT_SERVICE: serviceBinding(fetchMock),
     };
     const response = await worker.fetch(
       recoveryRequest({ observedDeploymentId: "healthy-deployment" }),
@@ -910,8 +1217,10 @@ describe("Incident Room acceptance", () => {
       CLOUDFLARE_ACCOUNT_ID: "account-id",
       CLOUDFLARE_API_TOKEN: "test-token",
       CHECKOUT_WORKER_NAME: "incident-room-checkout",
+      PAYMENT_WORKER_NAME: "incident-room-payment",
       CHECKOUT_BASE_URL: "https://checkout.test",
       CHECKOUT_HEALTHY_VERSION_ID: "healthy-version-id",
+      CHECKOUT_SERVICE: serviceBinding(fetchMock),
     };
     const response = await worker.fetch(
       recoveryRequest({ observedDeploymentId: "broken-deployment" }),

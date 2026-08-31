@@ -27,6 +27,10 @@ export interface Env {
   CHECKOUT_HEALTHY_VERSION_ID?: string;
   CHECKOUT_CONCURRENT_VERSION_ID?: string;
   PAYMENT_HEALTHY_VERSION_ID?: string;
+  INCIDENT_ID?: string;
+  INCIDENT_TITLE?: string;
+  EVIDENCE_SOURCE_MODE?: string;
+  EVIDENCE_SOURCE_LABEL?: string;
 }
 
 interface HealthResponse {
@@ -63,6 +67,34 @@ function required(env: Env, key: keyof Env): string {
     throw new Error(`Missing server configuration: ${String(key)}`);
   }
   return value;
+}
+
+function configuredValue(env: Env, key: keyof Env, fallback: string): string {
+  const value = env[key];
+  return typeof value === "string" && value.length > 0 ? value : fallback;
+}
+
+function configuredWorkerNames(env: Env): { checkout: string; payment: string } {
+  const checkout = required(env, "CHECKOUT_WORKER_NAME");
+  const payment = required(env, "PAYMENT_WORKER_NAME");
+  if (checkout === payment) {
+    throw new Error("Invalid server configuration: checkout and payment must use different Workers.");
+  }
+  return { checkout, payment };
+}
+
+function checkoutWriteTarget(env: Env): string {
+  return configuredWorkerNames(env).checkout;
+}
+
+function evidenceSourceMode(env: Env): "BUILT_IN_LAB" | "SELF_HOSTED" {
+  const mode = configuredValue(env, "EVIDENCE_SOURCE_MODE", "BUILT_IN_LAB");
+  if (mode !== "BUILT_IN_LAB" && mode !== "SELF_HOSTED") {
+    throw new Error(
+      "Invalid server configuration: EVIDENCE_SOURCE_MODE must be BUILT_IN_LAB or SELF_HOSTED.",
+    );
+  }
+  return mode;
 }
 
 async function cloudflareFetch<T>(
@@ -141,7 +173,12 @@ async function labFetch(
   init: RequestInit,
 ): Promise<Response> {
   const binding = serviceId === "checkout" ? env.CHECKOUT_SERVICE : env.PAYMENT_SERVICE;
-  return binding ? binding.fetch(new Request(url, init)) : fetch(url, init);
+  if (!binding) {
+    throw new Error(
+      `Missing server configuration: ${serviceId === "checkout" ? "CHECKOUT_SERVICE" : "PAYMENT_SERVICE"}`,
+    );
+  }
+  return binding.fetch(new Request(url, init));
 }
 
 async function readHealth(
@@ -166,14 +203,12 @@ async function probeCheckout(env: Env, baseUrl: string): Promise<number> {
 }
 
 async function currentIncident(env: Env): Promise<IncidentSummary> {
-  const checkoutWorker = required(env, "CHECKOUT_WORKER_NAME");
-  const paymentWorker = required(env, "PAYMENT_WORKER_NAME");
+  const workers = configuredWorkerNames(env);
+  const checkoutWorker = workers.checkout;
+  const paymentWorker = workers.payment;
   const checkoutUrl = required(env, "CHECKOUT_BASE_URL");
   const paymentUrl = required(env, "PAYMENT_BASE_URL");
-
-  if (checkoutWorker !== "incident-room-checkout" || paymentWorker !== "incident-room-payment") {
-    throw new Error("Worker allowlist mismatch.");
-  }
+  const sourceMode = evidenceSourceMode(env);
 
   const [checkoutHealth, paymentHealth, checkoutDeployments, paymentDeployments] =
     await Promise.all([
@@ -192,14 +227,15 @@ async function currentIncident(env: Env): Promise<IncidentSummary> {
     required(env, "CHECKOUT_CONCURRENT_VERSION_ID"),
   ]);
   const paymentHealthyVersion = required(env, "PAYMENT_HEALTHY_VERSION_ID");
-
   if (
+    checkoutHealth.serviceId !== "checkout" ||
     !allowlistedCheckoutVersions.has(checkoutVersion) ||
     checkoutHealth.versionId !== checkoutVersion
   ) {
     throw new Error("Checkout health and deployment evidence do not match the allowlist.");
   }
   if (
+    paymentHealth.serviceId !== "payment" ||
     paymentVersion !== paymentHealthyVersion ||
     paymentHealth.versionId !== paymentVersion
   ) {
@@ -207,8 +243,8 @@ async function currentIncident(env: Env): Promise<IncidentSummary> {
   }
 
   return {
-    incidentId: "INC-WEBMCP-001",
-    title: "Checkout requests failing after deployment",
+    incidentId: configuredValue(env, "INCIDENT_ID", "INC-WEBMCP-001"),
+    title: configuredValue(env, "INCIDENT_TITLE", "Checkout requests failing after deployment"),
     startedAt: checkoutDeployment.created_on,
     checkedAt: new Date().toISOString(),
     affectedServices: ["checkout"],
@@ -223,12 +259,25 @@ async function currentIncident(env: Env): Promise<IncidentSummary> {
     suspectedChangeIds: [`change-${checkoutDeployment.id}`],
     evidenceGaps: ["Workers Logs are secondary evidence and are not required for this response."],
     evidenceMode: "LIVE",
+    evidenceSource: {
+      mode: sourceMode,
+      label: configuredValue(
+        env,
+        "EVIDENCE_SOURCE_LABEL",
+        sourceMode === "SELF_HOSTED"
+          ? "Self-hosted Cloudflare source"
+          : "Dedicated Cloudflare rehearsal lab",
+      ),
+      services: workers,
+      readTransport: "Cloudflare Service Bindings",
+      deploymentTransport: "Cloudflare Workers Deployments API",
+    },
   };
 }
 
-function validateSubmission(submission: RecoverySubmission): RecoveryResult | null {
+function validateSubmission(env: Env, submission: RecoverySubmission): RecoveryResult | null {
   if (
-    submission.incidentId !== "INC-WEBMCP-001" ||
+    submission.incidentId !== configuredValue(env, "INCIDENT_ID", "INC-WEBMCP-001") ||
     !["checkout", "checkout_and_payment"].includes(submission.scopeMode) ||
     submission.targetVersion !== "checkout-healthy" ||
     typeof submission.observedDeploymentId !== "string" ||
@@ -267,15 +316,7 @@ async function performRecovery(
   env: Env,
   submission: RecoverySubmission,
 ): Promise<RecoveryResult> {
-  const checkoutWorker = required(env, "CHECKOUT_WORKER_NAME");
-  if (checkoutWorker !== "incident-room-checkout") {
-    return {
-      status: "INVALID_SCOPE",
-      currentDeploymentId: "unknown",
-      healthBefore: 0,
-      message: "Only incident-room-checkout may receive a deployment write.",
-    };
-  }
+  const checkoutWorker = checkoutWriteTarget(env);
 
   const checkoutUrl = required(env, "CHECKOUT_BASE_URL");
   const healthyVersion = required(env, "CHECKOUT_HEALTHY_VERSION_ID");
@@ -330,11 +371,7 @@ async function performRecovery(
 }
 
 async function performLabReset(env: Env): Promise<LabResetResult> {
-  const checkoutWorker = required(env, "CHECKOUT_WORKER_NAME");
-  const paymentWorker = required(env, "PAYMENT_WORKER_NAME");
-  if (checkoutWorker !== "incident-room-checkout" || paymentWorker !== "incident-room-payment") {
-    throw new Error("Worker allowlist mismatch.");
-  }
+  const { checkout: checkoutWorker } = configuredWorkerNames(env);
 
   const brokenVersion = required(env, "CHECKOUT_BROKEN_VERSION_ID");
   const deployment = await createDeployment(
@@ -376,7 +413,7 @@ async function runRecovery(
   env: Env,
   submission: RecoverySubmission,
 ): Promise<RecoveryResult> {
-  const invalid = validateSubmission(submission);
+  const invalid = validateSubmission(env, submission);
   if (invalid) return invalid;
 
   const requestKey = `${submission.incidentId}:${submission.observedDeploymentId}`;
@@ -395,11 +432,8 @@ async function runRecovery(
 }
 
 async function createCompetingDeployment(env: Env): Promise<Response> {
-  const checkoutWorker = required(env, "CHECKOUT_WORKER_NAME");
+  const checkoutWorker = checkoutWriteTarget(env);
   const concurrentVersion = required(env, "CHECKOUT_CONCURRENT_VERSION_ID");
-  if (checkoutWorker !== "incident-room-checkout") {
-    return json({ message: "Worker allowlist mismatch." }, 403);
-  }
   const deployment = await createDeployment(
     env,
     checkoutWorker,
@@ -426,12 +460,19 @@ async function handleApi(request: Request, env: Env): Promise<Response> {
       return json(await resetLab(env));
     }
     if (request.method === "POST" && url.pathname === "/api/lab/competing-deployment") {
+      if (request.headers.get("X-Incident-Room-Action") !== "make-plan-stale") {
+        return json({ message: "Competing deployment requires the same-origin human action header." }, 403);
+      }
       return await createCompetingDeployment(env);
     }
     return json({ message: "API endpoint not found." }, 404);
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unexpected server error.";
-    const status = message.startsWith("Missing server configuration") ? 503 : 500;
+    const status =
+      message.startsWith("Missing server configuration") ||
+      message.startsWith("Invalid server configuration")
+        ? 503
+        : 500;
     return json({ message }, status);
   }
 }

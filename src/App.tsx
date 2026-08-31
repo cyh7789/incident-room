@@ -455,6 +455,9 @@ export default function App() {
   const agentPreparedPlan = plan.activities.some(
     (activity) => activity.id === "agent-prepared-plan",
   );
+  const agentInspectedIncident = plan.activities.some(
+    (activity) => activity.id === "agent-inspected",
+  );
   useEffect(() => {
     if (!isExplainerOpen) return;
     const previousOverflow = document.body.style.overflow;
@@ -559,8 +562,14 @@ export default function App() {
   }, [plan.state]);
 
   useEffect(() => {
-    if (selectedChange) setActiveStep((current) => current < 2 ? 2 : current);
-  }, [selectedChange]);
+    if (agentInspectedIncident && !selectedChange) {
+      setActiveStep((current) => current < 2 ? 2 : current);
+    }
+  }, [agentInspectedIncident, selectedChange]);
+
+  useEffect(() => {
+    if (selectedChange) reviewRecoveryPlan();
+  }, [reviewRecoveryPlan, selectedChange]);
 
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();

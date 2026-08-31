@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import type { IncidentSummary } from "./domain";
+import type { ChangeComparison, IncidentSummary } from "./domain";
 
 export type WebMcpStatus = "REGISTERING" | "READY" | "UNSUPPORTED" | "ERROR";
 
@@ -42,7 +42,7 @@ interface WebMcpActions {
   showChangeComparison: (
     changeId: string,
     source?: "AGENT" | "HUMAN",
-  ) => Promise<unknown>;
+  ) => Promise<ChangeComparison>;
 }
 
 export function useWebMcpTools(actions: WebMcpActions): WebMcpStatus {
@@ -63,7 +63,7 @@ export function useWebMcpTools(actions: WebMcpActions): WebMcpStatus {
         {
           name: "inspect_current_incident",
           description:
-            "Inspect the incident open in this tab and visibly focus the affected service. Use before preparing or refreshing a recovery plan.",
+            "Inspect the incident open in this tab and visibly focus the affected service. If checkout is healthy, stop and ask the human to start the 100-second demo. If checkout is degraded and payment is healthy, continue with show_change_comparison.",
           inputSchema: {
             type: "object",
             properties: {
@@ -83,7 +83,16 @@ export function useWebMcpTools(actions: WebMcpActions): WebMcpStatus {
           execute: async (input) => {
             const value = input.sinceMinutes;
             const sinceMinutes = typeof value === "number" ? value : undefined;
-            return actions.inspectCurrentIncident(sinceMinutes, "AGENT");
+            const incident = await actions.inspectCurrentIncident(sinceMinutes, "AGENT");
+            const recoveryReady =
+              incident.health.checkout === "DEGRADED" && incident.health.payment === "HEALTHY";
+            return {
+              ...incident,
+              recoveryReady,
+              nextAction: recoveryReady
+                ? "Call show_change_comparison with the suspected change ID. The result will open the visible Recovery Plan for review."
+                : "Stop. Ask the human to press Start 100-second demo in this page, then inspect the incident again.",
+            };
           },
         },
         { signal: controller.signal },
@@ -92,7 +101,7 @@ export function useWebMcpTools(actions: WebMcpActions): WebMcpStatus {
         {
           name: "show_change_comparison",
           description:
-            "Open the visible comparison for a suspected change already listed in the current incident.",
+            "Open the visible comparison for a suspected change already listed in the current incident. The result advances this same page to the mounted Recovery Plan for review.",
           inputSchema: {
             type: "object",
             properties: {
@@ -113,7 +122,12 @@ export function useWebMcpTools(actions: WebMcpActions): WebMcpStatus {
             if (typeof input.changeId !== "string") {
               throw new Error("changeId is required");
             }
-            return actions.showChangeComparison(input.changeId, "AGENT");
+            const comparison = await actions.showChangeComparison(input.changeId, "AGENT");
+            return {
+              ...comparison,
+              nextAction:
+                "The Recovery Plan is now visible in this tab. Fill its visible fields for human review, but do not submit it.",
+            };
           },
         },
         { signal: controller.signal },

@@ -263,19 +263,38 @@ describe("Incident Room acceptance", () => {
 
     await waitFor(() => expect(harness.tools).toHaveLength(2));
     const inspect = harness.tools.find((tool) => tool.name === "inspect_current_incident")!;
+    let inspectResult: Record<string, unknown> | undefined;
     await act(async () => {
-      await inspect.execute({ sinceMinutes: 10 });
+      inspectResult = await inspect.execute({ sinceMinutes: 10 }) as Record<string, unknown>;
     });
     expect(
       screen.getByRole("button", { name: /checkout broken-version-id degraded/i }),
     ).toBeTruthy();
     expect(screen.getByText("Cloudflare lab")).toBeTruthy();
+    expect(inspectResult?.nextAction).toBe(
+      "Call show_change_comparison with the suspected change ID. The result will open the visible Recovery Plan for review.",
+    );
+    expect(screen.getByRole("main").getAttribute("data-active-step")).toBe("2");
+    expect(screen.getByLabelText("Current WebMCP handoff").textContent).toContain(
+      "show_change_comparison",
+    );
 
     const compare = harness.tools.find((tool) => tool.name === "show_change_comparison")!;
+    let comparisonResult: Record<string, unknown> | undefined;
     await act(async () => {
-      await compare.execute({ changeId: "change-broken-version-id" });
+      comparisonResult = await compare.execute({
+        changeId: "change-broken-version-id",
+      }) as Record<string, unknown>;
     });
     expect(screen.getByText("response status: 200 → 500")).toBeTruthy();
+    expect(comparisonResult?.nextAction).toBe(
+      "The Recovery Plan is now visible in this tab. Fill its visible fields for human review, but do not submit it.",
+    );
+    expect(screen.getByRole("main").getAttribute("data-active-step")).toBe("3");
+    expect(screen.getByLabelText("Current WebMCP handoff").textContent).toContain(
+      "prepare_recovery_rehearsal",
+    );
+    await waitFor(() => expect(document.activeElement?.id).toBe("scopeMode"));
 
     fireEvent.click(screen.getByRole("button", { name: /payment payment-version-id/i }));
     expect(screen.getByText("Focused: payment")).toBeTruthy();
@@ -333,9 +352,8 @@ describe("Incident Room acceptance", () => {
     await waitFor(() => expect(screen.getByText("response status: 200 → 500")).toBeTruthy());
     expect(screen.getAllByText("Human opened deployment evidence").length).toBeGreaterThanOrEqual(1);
     expect(screen.queryByText("Agent called show_change_comparison")).toBeNull();
-    expect(humanAction.contains(document.activeElement)).toBe(true);
-    fireEvent.click(within(humanAction).getByRole("button", { name: "Review Recovery Plan" }));
     await waitFor(() => expect(document.activeElement?.id).toBe("scopeMode"));
+    expect(main.getAttribute("data-active-step")).toBe("3");
     expect(screen.getByText("Default plan values are ready for human review")).toBeTruthy();
     expect(screen.queryByText("Agent prepared this live form")).toBeNull();
 
@@ -566,9 +584,16 @@ describe("Incident Room acceptance", () => {
     await waitFor(() => expect(screen.getByText("Recovery verified")).toBeTruthy());
 
     const inspect = harness.tools.find((tool) => tool.name === "inspect_current_incident")!;
+    let recoveredInspectResult: Record<string, unknown> | undefined;
     await act(async () => {
-      await inspect.execute({ sinceMinutes: 10 });
+      recoveredInspectResult = await inspect.execute({
+        sinceMinutes: 10,
+      }) as Record<string, unknown>;
     });
+    expect(recoveredInspectResult?.recoveryReady).toBe(false);
+    expect(recoveredInspectResult?.nextAction).toBe(
+      "Stop. Ask the human to press Start 100-second demo in this page, then inspect the incident again.",
+    );
 
     const incidentTrack = screen.getByRole("region", {
       name: "500 observed → change found → human approval → 200 verified",

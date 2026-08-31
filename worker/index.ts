@@ -209,7 +209,7 @@ async function currentIncident(env: Env): Promise<IncidentSummary> {
   return {
     incidentId: "INC-WEBMCP-001",
     title: "Checkout requests failing after deployment",
-    startedAt: new Date().toISOString(),
+    startedAt: checkoutDeployment.created_on,
     checkedAt: new Date().toISOString(),
     affectedServices: ["checkout"],
     health: {

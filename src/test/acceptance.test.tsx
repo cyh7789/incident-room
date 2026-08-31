@@ -243,7 +243,7 @@ describe("Incident Room acceptance", () => {
     expect(within(dialog).getByRole("list", { name: "100-second recovery walkthrough" }).children).toHaveLength(3);
     expect(within(dialog).getByText(/start 100-second demo/i)).toBeTruthy();
     expect(within(dialog).getByText(/then prepare a recovery plan for me to review/i)).toBeTruthy();
-    expect(within(dialog).getByText(/review the rollback.*change Recovery scope to Checkout only.*agent proposes three permanent-fix paths/i)).toBeTruthy();
+    expect(within(dialog).getByText(/review the rollback.*change Recovery scope to Checkout only.*three paths appear immediately.*agent can refine/i)).toBeTruthy();
     expect(within(dialog).getByText(/Base: 500.*rollback.*200.*agent repair options.*human-selected simulated issue.*PLAN_STALE.*no write/i)).toBeTruthy();
     expect(within(dialog).getByText(/ChatGPT Site tools lists three imperative tools/i)).toBeTruthy();
     expect(within(dialog).getByText(/Chrome WebMCP also discovers the declarative Recovery Plan form/i)).toBeTruthy();

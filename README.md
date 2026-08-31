@@ -42,7 +42,7 @@ npm run check
 npm run check:lab
 ```
 
-The required path covers WebMCP discovery, shared visible state, human-only lab reset, declarative manual submit, lifecycle cleanup, server allowlists, stale rejection without rollback, the real broken-to-recovered flow, and an agent-proposed remediation decision after recovery.
+The required path covers WebMCP discovery, shared visible state, human-only lab reset, declarative manual submit, lifecycle cleanup, server allowlists, stale rejection without rollback, the real broken-to-recovered flow, and a visible remediation decision with optional agent refinement after recovery.
 
 ## Connect your own Cloudflare Workers
 

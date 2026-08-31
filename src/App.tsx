@@ -987,9 +987,9 @@ export default function App() {
             <p className="eyebrow">Human + agent incident recovery</p>
             <h1 id="product-title">One live Recovery Plan. Agent prepares it. Human decides.</h1>
             <p className="product-summary">
-              Incident Room uses WebMCP so a person and an agent can inspect the same failure,
-              edit the same page object, verify the same checkout request after a guarded rollback,
-              and choose among agent-proposed permanent fixes.
+            Incident Room uses WebMCP so a person and an agent can inspect the same failure,
+            edit the same page object, verify the same checkout request after a guarded rollback,
+            and choose among visible permanent-fix paths the agent can refine.
             </p>
             <div className="product-actions">
               <button
@@ -1016,7 +1016,7 @@ export default function App() {
               <ArrowRight aria-hidden="true" size={15} />
               <span><small>04</small><strong>Human chooses permanent fix</strong></span>
             </div>
-            <p>The base path proves 500 → 200, then the agent proposes repair options for a human decision. A superseded plan proves <code>PLAN_STALE</code> with no write.</p>
+            <p>The base path proves 500 → 200, immediately presents repair options, then lets the agent refine the recommendation before a human decision. A superseded plan proves <code>PLAN_STALE</code> with no write.</p>
           </aside>
         </section>
 
@@ -1632,7 +1632,7 @@ export default function App() {
                 <ol className="onboarding-steps" aria-label="100-second recovery walkthrough">
                   <li><span>1</span><div><strong>Start with a verified 500</strong><p>Press <b>Start 100-second demo</b>. The lab proves checkout is degraded while payment remains healthy.</p></div></li>
                   <li><span>2</span><div><strong>Ask the agent</strong><p>In ChatGPT’s in-app browser or WebMCP-enabled Chrome, ask: “Inspect the current incident, compare the suspected deployment change, then prepare a Recovery Plan for me to review.” The read tools update this page.</p></div></li>
-                  <li><span>3</span><div><strong>Approve recovery, then choose the root fix</strong><p>Review the rollback, change Recovery scope to Checkout only, and personally press Submit. After 200 is verified, the agent proposes three permanent-fix paths and a person chooses one.</p></div></li>
+                  <li><span>3</span><div><strong>Approve recovery, then choose the root fix</strong><p>Review the rollback, change Recovery scope to Checkout only, and personally press Submit. After 200 is verified, three paths appear immediately; the agent can refine the recommendation before a person chooses one.</p></div></li>
                 </ol>
                 <div className="proof-result">
                   <ShieldCheck aria-hidden="true" size={18} />

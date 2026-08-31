@@ -110,6 +110,7 @@ interface GuidedHumanAction {
   detail: string;
   label: string;
   icon: ReactNode;
+  variant?: "primary" | "secondary";
   disabled?: boolean;
   busy?: boolean;
   onClick: () => void;
@@ -153,7 +154,7 @@ const guidedSteps: Array<{
     surfaceCue: "Agent prepares",
     surfaceName: "prepare_recovery_rehearsal",
     surfaceKind: "Declarative form · no write",
-    surfaceDetail: "The agent fills the mounted plan with the exact precheck, checkout rollback, and verification path.",
+    surfaceDetail: "The agent fills the Recovery Plan with the exact precheck, checkout rollback, and verification path.",
   },
   {
     id: 4,
@@ -163,7 +164,7 @@ const guidedSteps: Array<{
     surfaceCue: "Required person action",
     surfaceName: "Human Submit",
     surfaceKind: "Only write entry point",
-    surfaceDetail: "The human reviews the proposed operation, narrows scope, and personally submits this page state.",
+    surfaceDetail: "The human reviews the proposed operation, narrows scope, and personally submits the Recovery Plan.",
   },
   {
     id: 5,
@@ -180,10 +181,10 @@ const guidedSteps: Array<{
     label: "Remediate",
     detail: "Choose root fix",
     icon: <Wrench aria-hidden="true" size={18} />,
-    surfaceCue: "Next agent call",
+    surfaceCue: "Optional agent refinement",
     surfaceName: "propose_remediation_options",
     surfaceKind: "Page-only proposal · no external write",
-    surfaceDetail: "After 200 is verified, the agent compares three permanent-fix paths and leaves the final choice to the human.",
+    surfaceDetail: "Three permanent-fix paths appear after recovery. The agent can refine them before the human chooses.",
   },
 ];
 
@@ -260,16 +261,16 @@ function GuidedProgress({
             mode: "active",
             title: remediation.source === "AGENT"
               ? "Agent-refined options are visible; the human decides"
-              : "A repair baseline is ready; the agent can refine it",
+              : "Three repair paths are ready; the human decides",
             detail: remediation.source === "AGENT"
               ? "Compare the agent recommendation with the two alternatives, then record one follow-up path on this page."
-              : "Review the immediate recommendation now, or ask the agent to refine it from the verified 500 → 200 evidence.",
+              : "Choose now, or optionally ask the agent to refine the recommendation from the verified 500 → 200 evidence.",
           }
         : state === "RECOVERED" && activeStep === 6
           ? {
               mode: "active",
-              title: "Recovery is verified; permanent remediation is still open",
-              detail: "The next agent call must formulate options from the recovered deployment evidence.",
+              title: "Preparing permanent-fix choices",
+              detail: "The page is loading three baseline paths from the verified recovery evidence.",
             }
           : state === "RECOVERED"
             ? {
@@ -286,19 +287,19 @@ function GuidedProgress({
         : state === "SUBMITTING"
           ? {
               mode: "active",
-              title: "Controller is checking the approved page state",
+              title: "Controller is checking the approved Recovery Plan",
               detail: "The deployment stale gate runs before any rollback write.",
             }
           : state === "DRAFTED"
             ? {
                 mode: "active",
                 title: "Agent draft is visible in this tab",
-                detail: "The shared Recovery Plan stays mounted for the human decision.",
+                detail: "The Recovery Plan remains visible for the human decision.",
               }
             : state === "HUMAN_EDITED"
               ? {
                   mode: "active",
-                  title: "Human changed the shared page state",
+                  title: "Human changed the Recovery Plan",
                   detail: "Only the scope and reason visible here can cross the write gate.",
                 }
               : {
@@ -306,6 +307,16 @@ function GuidedProgress({
                   title: "Follow one causal path",
                   detail: "Observe the live failure, approve the guarded rollback, verify the same request, then choose a permanent-fix path.",
                 };
+
+  const actionCue = activeStep === 4
+    ? { label: "Human turn · only write entry", icon: <UserRound aria-hidden="true" size={14} /> }
+    : activeStep === 5
+      ? { label: "Controller proof", icon: <ShieldCheck aria-hidden="true" size={14} /> }
+      : activeStep === 6
+        ? { label: "Human turn · agent refinement optional", icon: <UserRound aria-hidden="true" size={14} /> }
+        : activeStep === 3
+          ? { label: "Agent prepares · human reviews", icon: <Bot aria-hidden="true" size={14} /> }
+          : { label: "Agent tool · manual control available", icon: <Bot aria-hidden="true" size={14} /> };
 
   return (
     <section
@@ -352,15 +363,15 @@ function GuidedProgress({
           );
         })}
       </ol>
-      <div className="guided-human-action" aria-label="Human next action">
+      <div className="guided-human-action" aria-label="Current guided action">
         <div className="guided-action-copy" role="status" aria-live="polite" aria-atomic="true">
-          <span><UserRound aria-hidden="true" size={14} /> Human next action</span>
+          <span>{actionCue.icon} {actionCue.label}</span>
           <strong>{humanAction.title}</strong>
           <p>{humanAction.detail}</p>
         </div>
         <button
           type="button"
-          className="primary-button guided-action-button"
+          className={`${humanAction.variant === "secondary" ? "secondary-button" : "primary-button"} guided-action-button`}
           onClick={() => {
             if (!humanAction.busy) humanAction.onClick();
           }}
@@ -504,7 +515,7 @@ function EvidenceConnection({
             <ArrowRight aria-hidden="true" size={14} />
             <li><strong>Workers Deployments API</strong><span>version evidence + guarded write</span></li>
             <ArrowRight aria-hidden="true" size={14} />
-            <li><strong>Recovery Plan</strong><span>one shared page object</span></li>
+            <li><strong>Recovery Plan</strong><span>one shared live plan</span></li>
           </ol>
           <p>No log server is required for this synchronous proof. Workers Logs stay secondary evidence.</p>
         </div>
@@ -650,7 +661,7 @@ export default function App() {
   const focusRecoveryPlan = useCallback((step: 3 | 4) => {
     setActiveStep(step);
     requestAnimationFrame(() => {
-      const scopeMode = document.getElementById("scopeMode") as HTMLSelectElement | null;
+      const scopeMode = document.querySelector<HTMLInputElement>('input[name="scopeMode"]:checked');
       if (scopeMode && !scopeMode.disabled) scopeMode.focus();
       else document.getElementById("plan-title")?.focus();
     });
@@ -736,7 +747,7 @@ export default function App() {
       ? {
           ...result,
           nextAction:
-            "Call propose_remediation_options with the regressed deployment ID, evidence-backed diagnosis, recommendation, and rationale. The human will choose on the visible page.",
+            "Three permanent-fix paths are now visible. Optionally call propose_remediation_options to refine the recommendation before the human chooses.",
         }
       : result);
 
@@ -809,7 +820,7 @@ export default function App() {
       if (hasPreparedPlan) {
         return {
           title: "Continue with the prepared Recovery Plan",
-          detail: "Continue to the shared page object without losing the visible draft.",
+          detail: "Continue to the Recovery Plan without losing the visible draft.",
           label: "Review Recovery Plan",
           icon: <UserRound aria-hidden="true" size={17} />,
           onClick: reviewRecoveryPlan,
@@ -870,8 +881,9 @@ export default function App() {
       return {
         title: "Human approval happens on this exact plan",
         detail: "Narrow the scope to checkout, review the proposed rollback, then personally Submit inside the form.",
-        label: "Review approval form",
+        label: "Jump to Submit",
         icon: <UserRound aria-hidden="true" size={17} />,
+        variant: "secondary",
         onClick: () => focusRecoveryPlan(4),
       };
     }
@@ -879,10 +891,10 @@ export default function App() {
     if (activeStep === 6) {
       if (!remediation) {
         return {
-          title: "Agent must now formulate permanent-fix options",
-          detail: "Call propose_remediation_options from the verified 500 → 200 evidence. No issue, PR, or deployment will be created.",
-          label: "Agent proposal required",
-          icon: <Bot aria-hidden="true" size={17} />,
+          title: "Permanent-fix choices are loading",
+          detail: "Three baseline paths will appear here. Agent refinement remains optional.",
+          label: "Preparing choices…",
+          icon: <RefreshCw className="spin" aria-hidden="true" size={17} />,
           disabled: true,
           onClick: () => undefined,
         };
@@ -891,11 +903,11 @@ export default function App() {
         return {
           title: remediation.source === "AGENT"
             ? "Review the agent recommendation and choose a repair path"
-            : "Review the repair baseline or ask the agent to refine it",
+            : "Choose a repair path or ask the agent to refine it",
           detail: remediation.source === "AGENT"
             ? "The recommendation is advisory. A person can select either alternative before recording the decision."
-            : "Three usable paths are already visible. The WebMCP agent can replace the baseline diagnosis and recommendation before the human decides.",
-          label: "Review three options",
+            : "Three paths are ready now. Agent refinement is optional and the final choice remains human.",
+          label: "Review repair choices",
           icon: <UserRound aria-hidden="true" size={17} />,
           onClick: () => document.getElementById("remediation-title")?.focus(),
         };
@@ -913,7 +925,7 @@ export default function App() {
     if (plan.state === "STALE") {
       return {
         title: "The stale gate refused the rollback",
-        detail: "Refresh the deployment baseline, revise the mounted plan, then submit again.",
+        detail: "Refresh the deployment baseline, revise the Recovery Plan, then submit again.",
         label: "Refresh and revise plan",
         icon: <RefreshCw aria-hidden="true" size={17} />,
         onClick: refreshAndRevise,
@@ -930,7 +942,7 @@ export default function App() {
     }
     if (plan.state === "SUBMITTING") {
       return {
-        title: "Controller is checking the approved page state",
+        title: "Controller is checking the approved Recovery Plan",
         detail: "The stale gate runs before any rollback write, then verifies the same checkout request.",
         label: "Checking approval…",
         icon: <RefreshCw className="spin" aria-hidden="true" size={17} />,
@@ -940,7 +952,7 @@ export default function App() {
     }
     return {
       title: "Recovery was not verified",
-      detail: "Return to the mounted plan, inspect the visible values, and decide whether to try again.",
+      detail: "Return to the Recovery Plan, inspect the visible values, and decide whether to try again.",
       label: "Return to Recovery Plan",
       icon: <UserRound aria-hidden="true" size={17} />,
       onClick: reviewRecoveryPlan,
@@ -988,7 +1000,7 @@ export default function App() {
             <h1 id="product-title">One live Recovery Plan. Agent prepares it. Human decides.</h1>
             <p className="product-summary">
             Incident Room uses WebMCP so a person and an agent can inspect the same failure,
-            edit the same page object, verify the same checkout request after a guarded rollback,
+            edit the same Recovery Plan, verify the same checkout request after a guarded rollback,
             and choose among visible permanent-fix paths the agent can refine.
             </p>
             <div className="product-actions">
@@ -1006,17 +1018,17 @@ export default function App() {
             </div>
           </div>
           <aside className="product-proof" aria-label="100-second proof chain">
-            <p className="eyebrow">What the judge will see</p>
+            <p className="eyebrow">Base path · four outcomes across six steps</p>
             <div className="proof-chain">
               <span><small>01</small><strong>500 observed</strong></span>
               <ArrowRight aria-hidden="true" size={15} />
-              <span><small>02</small><strong>PLAN_STALE if superseded · no write</strong></span>
+              <span><small>02</small><strong>Human approves rollback</strong></span>
               <ArrowRight aria-hidden="true" size={15} />
               <span><small>03</small><strong>200 verified</strong></span>
               <ArrowRight aria-hidden="true" size={15} />
-              <span><small>04</small><strong>Human chooses permanent fix</strong></span>
+              <span><small>04</small><strong>Human chooses the fix</strong></span>
             </div>
-            <p>The base path proves 500 → 200, immediately presents repair options, then lets the agent refine the recommendation before a human decision. A superseded plan proves <code>PLAN_STALE</code> with no write.</p>
+            <p className="proof-guard"><ShieldCheck aria-hidden="true" size={15} /><span><strong>Safety proof:</strong> a superseded Recovery Plan returns <code>PLAN_STALE</code> with no rollback write.</span></p>
           </aside>
         </section>
 
@@ -1156,7 +1168,7 @@ export default function App() {
             <div className="plan-accent" />
             <div className="panel-heading plan-heading">
               <div>
-                <p className="eyebrow">Shared live page object</p>
+                <p className="eyebrow">Shared live Recovery Plan</p>
                 <h2 id="plan-title" tabIndex={-1}>Recovery Plan</h2>
               </div>
               <StatePill state={plan.state} />
@@ -1184,7 +1196,7 @@ export default function App() {
                               ? remediation.source === "AGENT"
                                 ? "Agent-refined options are ready for a human decision"
                                 : "A repair baseline is ready for a human decision"
-                              : "Permanent remediation still needs an agent proposal"}
+                              : "Preparing permanent-fix choices"}
                 </strong>
                 <p>
                   {activeStep <= 2 && hasPreparedPlan
@@ -1196,14 +1208,14 @@ export default function App() {
                       : activeStep === 3
                         ? "Inspect the stale precheck, checkout deployment write, and same-request verification before approval."
                         : activeStep === 4
-                          ? "Edit scopeMode, review the exact rollback, and personally Submit the final page state."
+                          ? "Edit scopeMode, review the exact rollback, and personally Submit the Recovery Plan."
                           : activeStep === 5
                             ? "A stale refusal and a verified rollback remain attached to this plan."
                             : remediation
                               ? remediation.source === "AGENT"
                                 ? "Compare the agent-refined paths, then record one human-selected follow-up without creating external work."
                                 : "Choose from the three immediate paths, or let the agent refine the diagnosis before recording a follow-up."
-                              : "Use the verified 500 → 200 evidence to ask the agent for repair options."}
+                              : "The page is preparing three baseline paths from the verified 500 → 200 evidence."}
                 </p>
               </div>
             </div>
@@ -1250,41 +1262,57 @@ export default function App() {
               onSubmit={handleSubmit}
               onChange={() => syncDraftFromForm("HUMAN_EDITED")}
             >
-              <div className="form-group">
+              <fieldset className="form-group scope-field" role="radiogroup" aria-labelledby="scopeMode-label">
                 <div className="field-label-line">
-                  <label htmlFor="scopeMode">Recovery scope</label>
+                  <legend id="scopeMode-label">Recovery scope</legend>
                   <span className="field-activity">
                     {agentPreparedPlan ? <Bot aria-hidden="true" size={13} /> : <BookOpen aria-hidden="true" size={13} />}
                     {agentPreparedPlan ? "Agent proposed" : "Default scope"} · <strong>Human decides</strong>
                   </span>
                 </div>
-                <select
-                  id="scopeMode"
-                  name="scopeMode"
-                  defaultValue="checkout_and_payment"
-                  {...scopeToolAttributes}
-                  disabled={isRecoveryDisabled}
-                >
-                  <option value="checkout_and_payment">Checkout and payment</option>
-                  <option value="checkout">Checkout only</option>
-                </select>
+                <div className="scope-options">
+                  <label className="scope-option">
+                    <input
+                      id="scopeMode"
+                      type="radio"
+                      name="scopeMode"
+                      value="checkout_and_payment"
+                      defaultChecked
+                      {...scopeToolAttributes}
+                      disabled={isRecoveryDisabled}
+                    />
+                    <span><strong>Checkout and payment</strong><small>Initial proposal</small></span>
+                  </label>
+                  <label className="scope-option">
+                    <input
+                      id="scopeMode-checkout"
+                      type="radio"
+                      name="scopeMode"
+                      value="checkout"
+                      {...scopeToolAttributes}
+                      disabled={isRecoveryDisabled}
+                    />
+                    <span><strong>Checkout only</strong><small>Smallest recovery scope</small></span>
+                  </label>
+                </div>
                 <p className="field-help">Payment is healthy. Remove it before submitting the smallest plan.</p>
-              </div>
+              </fieldset>
 
               <div className="form-group">
                 <div className="field-label-line">
                   <label htmlFor="targetVersion">Target version</label>
                   <span className="field-activity"><ShieldCheck aria-hidden="true" size={13} /> Controller allowlist</span>
                 </div>
-                <select
+                <input
                   id="targetVersion"
+                  className="readonly-field"
                   name="targetVersion"
-                  defaultValue="checkout-healthy"
+                  type="text"
+                  value="checkout-healthy"
+                  readOnly
                   {...targetToolAttributes}
                   disabled={isRecoveryDisabled}
-                >
-                  <option value="checkout-healthy">checkout-healthy</option>
-                </select>
+                />
               </div>
 
               <div className="form-group">
@@ -1391,7 +1419,7 @@ export default function App() {
               ) : (
                 <div className="pending-result">
                   <ShieldCheck aria-hidden="true" size={18} />
-                  <span>No write occurs until the human submits this exact page state.</span>
+                  <span>No write occurs until the human submits this Recovery Plan.</span>
                 </div>
               )}
             </div>
@@ -1435,12 +1463,12 @@ export default function App() {
 
               {!remediation ? (
                 <div className="remediation-awaiting" role="status">
-                  <Bot aria-hidden="true" size={22} />
+                  <RefreshCw className="spin" aria-hidden="true" size={22} />
                   <div>
-                    <p className="eyebrow">Next agent call</p>
-                    <h3 id="remediation-title" tabIndex={-1}>Formulate permanent-fix options</h3>
+                    <p className="eyebrow">Human decision next</p>
+                    <h3 id="remediation-title" tabIndex={-1}>Preparing three permanent-fix paths</h3>
                     <p>
-                      Call <code>propose_remediation_options</code> with the regressed deployment, diagnosis, recommended path, and rationale. The result will appear here for a human choice.
+                      The baseline choices will appear here first. The agent can optionally refine the recommendation through <code>propose_remediation_options</code>.
                     </p>
                   </div>
                 </div>

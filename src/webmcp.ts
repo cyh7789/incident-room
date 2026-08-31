@@ -105,7 +105,7 @@ export function useWebMcpTools(actions: WebMcpActions): WebMcpStatus {
               nextAction: recoveryReady
                 ? "Call show_change_comparison with the suspected change ID. The result will open the visible rollback proposal for review."
                 : verifiedRecovery
-                  ? "Recovery is already verified at 200. Call propose_remediation_options with the regressed deployment ID, diagnosis, recommendation, and rationale."
+                  ? "Recovery is already verified at 200 and three repair paths are visible. Optionally call propose_remediation_options to refine the recommendation before the human chooses."
                 : "Stop. Ask the human to press Start 100-second demo in this page, then inspect the incident again.",
             };
           },
@@ -116,7 +116,7 @@ export function useWebMcpTools(actions: WebMcpActions): WebMcpStatus {
         {
           name: "show_change_comparison",
           description:
-            "Open the visible comparison for a suspected change already listed in the current incident. The result advances this same page to the mounted Recovery Plan and exact checkout rollback proposal.",
+            "Open the visible comparison for a suspected change already listed in the current incident. The result advances this same page to the Recovery Plan and exact checkout rollback proposal.",
           inputSchema: {
             type: "object",
             properties: {

@@ -231,7 +231,7 @@ export function useIncidentRoom() {
         activities: upsertActivity(current.activities, {
           id: `human-submitted-${submission.observedDeploymentId}`,
           actor: "HUMAN",
-          title: "Human submitted this page state",
+          title: "Human submitted the Recovery Plan",
           detail: `${scopeDetail(submission.scopeMode)} Baseline ${submission.observedDeploymentId}.`,
         }),
       }));

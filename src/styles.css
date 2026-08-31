@@ -175,7 +175,6 @@ a:focus-visible {
 .product-intro h1 { max-width: 25ch; margin: 0 0 9px; font-size: clamp(1.45rem, 2.8vw, 2.3rem); }
 .product-summary { max-width: 68ch; margin: 0; color: var(--text-muted); line-height: 1.58; }
 .product-actions { display: flex; align-items: center; gap: 12px; margin-top: 18px; }
-.hero-primary { width: auto; padding-inline: 18px; }
 .hero-secondary { display: inline-flex; align-items: center; gap: 6px; color: var(--accent-strong); white-space: nowrap; }
 
 .product-proof {
@@ -325,8 +324,6 @@ h2 { margin-bottom: 0; font-size: 1.08rem; line-height: 1.3; letter-spacing: -0.
 
 .shared-lab-note svg { flex: 0 0 auto; margin-top: 2px; color: var(--accent-strong); }
 .shared-lab-note time { color: var(--text); font-variant-numeric: tabular-nums; }
-.start-rehearsal-button { flex: 0 0 auto; }
-.evidence-source .start-rehearsal-button { width: 100%; }
 .source-error { margin: 12px 0 0; padding: 10px 12px; border: 1px solid #b9847e; border-radius: var(--radius-sm); background: var(--danger-bg); color: #703b37; font-size: 0.8rem; }
 
 .integration-map {
@@ -688,7 +685,7 @@ h2 { margin-bottom: 0; font-size: 1.08rem; line-height: 1.3; letter-spacing: -0.
   outline-offset: 4px;
   box-shadow: 0 0 0 9px rgb(111 89 106 / 0.12), 0 10px 24px rgb(116 80 68 / 0.22);
 }
-.primary-button:hover:not(:disabled) { background: #68463c; box-shadow: 0 13px 28px rgb(116 80 68 / 0.28); }
+.primary-button:hover:not(:disabled):not([aria-disabled="true"]) { background: #68463c; box-shadow: 0 13px 28px rgb(116 80 68 / 0.28); }
 .primary-button:disabled { cursor: not-allowed; opacity: 0.58; }
 .secondary-button { padding: 0 15px; border: 1px solid var(--border-strong); background: rgb(255 250 244 / 0.76); color: var(--text); }
 .secondary-button:hover:not(:disabled) { border-color: #7e6d61; background: var(--surface-raised); }
@@ -820,6 +817,28 @@ h2 { margin-bottom: 0; font-size: 1.08rem; line-height: 1.3; letter-spacing: -0.
 .guided-stepper small { color: inherit; font-size: 0.62rem; line-height: 1.25; opacity: 0.78; }
 .guided-step-copy code { overflow: hidden; color: var(--accent-strong); font-size: 0.57rem; font-weight: 750; text-overflow: ellipsis; white-space: nowrap; }
 
+.guided-human-action {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 280px;
+  align-items: center;
+  gap: 18px;
+  min-height: 82px;
+  margin-top: 10px;
+  padding: 10px 12px;
+  border: 1px solid #a88778;
+  border-radius: 13px;
+  background: linear-gradient(105deg, #f1e5dc, #f4ebe4 54%, #ede5e8);
+  box-shadow: inset 4px 0 #8d6151;
+}
+
+.guided-action-copy { display: grid; gap: 3px; min-width: 0; }
+.guided-action-copy > span { display: inline-flex; align-items: center; gap: 6px; color: var(--accent-strong); font-size: 0.59rem; font-weight: 850; letter-spacing: 0.11em; text-transform: uppercase; }
+.guided-action-copy strong { font-size: 0.82rem; line-height: 1.35; }
+.guided-action-copy p { margin: 0; color: var(--text-muted); font-size: 0.68rem; line-height: 1.42; }
+.guided-action-button { width: 100%; min-height: 48px; padding-inline: 14px; line-height: 1.2; text-align: center; white-space: normal; }
+.guided-action-button[aria-disabled="true"] { cursor: wait; opacity: 0.58; }
+.guided-action-button svg { flex: 0 0 auto; }
+
 .guided-handoff-grid {
   display: grid;
   grid-template-columns: minmax(0, 1.15fr) minmax(0, 0.85fr);
@@ -900,10 +919,6 @@ h2 { margin-bottom: 0; font-size: 1.08rem; line-height: 1.3; letter-spacing: -0.
 .handoff-strip > svg,
 .verification-path > svg { color: #8d7c70; }
 
-.stage-actions { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-top: 24px; padding-top: 20px; border-top: 1px solid var(--border); }
-.stage-actions > span { max-width: 54ch; color: var(--text-muted); font-size: 0.78rem; line-height: 1.5; }
-.stage-actions-forward { align-items: center; }
-.compact-primary { width: auto; padding-inline: 18px; white-space: nowrap; }
 .step-4-only.result-area { margin-top: 0; }
 .step-4-only.plan-activity { max-height: 330px; overflow: auto; padding-right: 5px; }
 
@@ -1143,7 +1158,6 @@ h2 { margin-bottom: 0; font-size: 1.08rem; line-height: 1.3; letter-spacing: -0.
   .product-intro h1 { font-size: 1.35rem; }
   .product-summary { font-size: 0.86rem; line-height: 1.5; }
   .product-actions { align-items: stretch; flex-direction: column; }
-  .hero-primary { width: 100%; }
   .hero-secondary { justify-content: center; min-height: 44px; }
   .product-proof { padding: 14px; }
   .proof-chain { grid-template-columns: 1fr; gap: 7px; }
@@ -1164,7 +1178,6 @@ h2 { margin-bottom: 0; font-size: 1.08rem; line-height: 1.3; letter-spacing: -0.
   .evidence-source { padding: 18px; border-radius: var(--radius-md); }
   .evidence-source-heading, .evidence-source-footer { align-items: stretch; flex-direction: column; }
   .source-state { width: fit-content; }
-  .start-rehearsal-button { width: 100%; }
   .guided-progress { padding: 13px 12px; border-radius: var(--radius-md); }
   .guided-progress-heading { align-items: flex-start; }
   .guided-heading-status { align-items: flex-end; flex-direction: column; }
@@ -1174,14 +1187,14 @@ h2 { margin-bottom: 0; font-size: 1.08rem; line-height: 1.3; letter-spacing: -0.
   .guided-stepper button { justify-content: center; min-height: 52px; padding-inline: 3px; text-align: center; }
   .guided-step-copy { display: none; }
   .guided-step-icon { flex-basis: 30px; width: 30px; height: 30px; }
+  .guided-human-action { grid-template-columns: 1fr; gap: 10px; padding: 12px; }
+  .guided-action-button { width: 100%; white-space: normal; }
   .guided-handoff-grid { grid-template-columns: 1fr; }
   .guided-surface-heading { align-items: flex-start; flex-direction: column; gap: 5px; }
   .panel, .recovery-plan { padding: 18px; border-radius: var(--radius-md); }
   .recovery-plan { min-height: 480px; }
   .guided-stage .evidence-panel { padding: 18px; }
   .stage-title-block { grid-template-columns: 1fr; }
-  .stage-actions { align-items: stretch; flex-direction: column-reverse; }
-  .stage-actions .primary-button, .stage-actions .secondary-button { width: 100%; }
   .panel-heading { align-items: flex-start; }
   .heading-trail { justify-items: start; }
   .service-node { align-items: flex-start; gap: 12px; }

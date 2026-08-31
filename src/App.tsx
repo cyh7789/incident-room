@@ -1,7 +1,6 @@
 import {
   Activity,
   AlertTriangle,
-  ArrowLeft,
   ArrowRight,
   Bot,
   BookOpen,
@@ -102,6 +101,16 @@ function ServiceButton({
 type GuidedStep = 1 | 2 | 3 | 4;
 type GettingStartedTab = "use" | "install";
 
+interface GuidedHumanAction {
+  title: string;
+  detail: string;
+  label: string;
+  icon: ReactNode;
+  disabled?: boolean;
+  busy?: boolean;
+  onClick: () => void;
+}
+
 const guidedSteps: Array<{
   id: GuidedStep;
   label: string;
@@ -159,12 +168,14 @@ function GuidedProgress({
   availableStep,
   state,
   webMcpStatus,
+  humanAction,
   onStepChange,
 }: {
   activeStep: GuidedStep;
   availableStep: GuidedStep;
   state: RecoveryPlan["state"];
   webMcpStatus: WebMcpStatus;
+  humanAction: GuidedHumanAction;
   onStepChange: (step: GuidedStep) => void;
 }) {
   const activeSurface = guidedSteps[activeStep - 1];
@@ -255,6 +266,26 @@ function GuidedProgress({
           );
         })}
       </ol>
+      <div className="guided-human-action" aria-label="Human next action">
+        <div className="guided-action-copy" role="status" aria-live="polite" aria-atomic="true">
+          <span><UserRound aria-hidden="true" size={14} /> Human next action</span>
+          <strong>{humanAction.title}</strong>
+          <p>{humanAction.detail}</p>
+        </div>
+        <button
+          type="button"
+          className="primary-button guided-action-button"
+          onClick={() => {
+            if (!humanAction.busy) humanAction.onClick();
+          }}
+          disabled={humanAction.disabled}
+          aria-disabled={humanAction.busy || undefined}
+        >
+          {humanAction.icon}
+          {humanAction.label}
+          {!humanAction.disabled && !humanAction.busy && <ArrowRight aria-hidden="true" size={17} />}
+        </button>
+      </div>
       <div className="guided-handoff-grid">
         <div className="guided-surface-handoff" aria-label="Current WebMCP handoff">
           <div className="guided-surface-heading">
@@ -296,14 +327,12 @@ function EvidenceConnection({
   isLoading,
   isResetting,
   resetError,
-  onStartFresh,
 }: {
   incident: IncidentSummary;
   planState: RecoveryPlan["state"];
   isLoading: boolean;
   isResetting: boolean;
   resetError: string | null;
-  onStartFresh: () => void;
 }) {
   const isRecovered = planState === "RECOVERED";
   const isReady =
@@ -369,15 +398,6 @@ function EvidenceConnection({
             )}
           </span>
         </div>
-        <button
-          type="button"
-          className="secondary-button start-rehearsal-button"
-          onClick={onStartFresh}
-          disabled={isLoading || isResetting}
-        >
-          <RefreshCw className={isResetting ? "spin" : undefined} aria-hidden="true" size={16} />
-          {isResetting ? "Starting demo…" : "Start 100-second demo"}
-        </button>
       </div>
       {resetError && <p className="source-error" role="alert">{resetError}</p>}
     </section>
@@ -477,8 +497,14 @@ export default function App() {
 
   const goToStep = useCallback((step: GuidedStep) => {
     setActiveStep(step);
+  }, []);
+
+  const reviewRecoveryPlan = useCallback(() => {
+    setActiveStep(3);
     requestAnimationFrame(() => {
-      document.getElementById(step >= 3 ? "plan-title" : `stage-title-${step}`)?.focus();
+      const scopeMode = document.getElementById("scopeMode") as HTMLSelectElement | null;
+      if (scopeMode && !scopeMode.disabled) scopeMode.focus();
+      else document.getElementById("plan-title")?.focus();
     });
   }, []);
 
@@ -560,6 +586,7 @@ export default function App() {
   };
 
   const startFreshRehearsal = () => {
+    if (isLabResetting) return;
     void actions.startFreshRehearsal()
       .then(() => {
         formRef.current?.reset();
@@ -570,9 +597,135 @@ export default function App() {
 
   const refreshAndRevise = () => {
     void actions.inspectCurrentIncident()
-      .then(() => setActiveStep(3))
+      .then(reviewRecoveryPlan)
       .catch(() => undefined);
   };
+
+  const humanAction: GuidedHumanAction = (() => {
+    if (activeStep < 4 && ["SUBMITTING", "STALE", "RECOVERED", "FAILED"].includes(plan.state)) {
+      return {
+        title: "A recovery result is already available",
+        detail: "Return to the guarded Controller response without searching through the page.",
+        label: "Return to result",
+        icon: <ShieldCheck aria-hidden="true" size={17} />,
+        onClick: () => goToStep(4),
+      };
+    }
+
+    if (
+      !isIncidentLoading &&
+      incident.health.checkout !== "DEGRADED" &&
+      plan.state !== "RECOVERED" &&
+      plan.state !== "SUBMITTING"
+    ) {
+      return {
+        title: "Checkout is healthy; begin from a visible 500",
+        detail: "Reset only the checkout rehearsal Worker, then follow the same guarded recovery path again.",
+        label: isLabResetting ? "Starting demo…" : "Restart from checkout 500",
+        icon: <RefreshCw className={isLabResetting ? "spin" : undefined} aria-hidden="true" size={17} />,
+        busy: isLabResetting,
+        onClick: startFreshRehearsal,
+      };
+    }
+
+    if (activeStep === 1) {
+      if (hasPreparedPlan) {
+        return {
+          title: "Continue with the prepared Recovery Plan",
+          detail: "Continue to the shared page object without losing the visible draft.",
+          label: "Review Recovery Plan",
+          icon: <UserRound aria-hidden="true" size={17} />,
+          onClick: reviewRecoveryPlan,
+        };
+      }
+      if (plan.state === "EMPTY") {
+        return {
+          title: "Create a clean checkout 500 starting point",
+          detail: "Reset the public rehearsal lab, then verify checkout is degraded while payment stays healthy.",
+          label: isLabResetting ? "Starting demo…" : "Start 100-second demo",
+          icon: <RefreshCw className={isLabResetting ? "spin" : undefined} aria-hidden="true" size={17} />,
+          disabled: isIncidentLoading,
+          busy: isLabResetting,
+          onClick: startFreshRehearsal,
+        };
+      }
+      return {
+        title: "Live failure evidence is ready",
+        detail: "Continue to the read-only deployment comparison. No recovery write occurs.",
+        label: "Diagnose the change",
+        icon: <GitCompareArrows aria-hidden="true" size={17} />,
+        disabled: isIncidentLoading || isLabResetting,
+        onClick: () => goToStep(2),
+      };
+    }
+
+    if (activeStep === 2) {
+      if (selectedChange) {
+        return {
+          title: "Deployment evidence is visible",
+          detail: "Move to the shared Recovery Plan and inspect every proposed value before approval.",
+          label: "Review Recovery Plan",
+          icon: <UserRound aria-hidden="true" size={17} />,
+          onClick: reviewRecoveryPlan,
+        };
+      }
+      return {
+        title: "Open the suspected checkout change",
+        detail: "Render the 200 → 500 comparison in this live page. The tool remains read-only.",
+        label: "Show change comparison",
+        icon: <GitCompareArrows aria-hidden="true" size={17} />,
+        disabled: isIncidentLoading || isLabResetting,
+        onClick: openSuspectedChange,
+      };
+    }
+
+    if (activeStep === 3) {
+      return {
+        title: "Human review happens on the shared page",
+        detail: "Inspect the visible values, change scopeMode, then personally Submit inside the form.",
+        label: "Review Recovery Plan",
+        icon: <UserRound aria-hidden="true" size={17} />,
+        onClick: reviewRecoveryPlan,
+      };
+    }
+
+    if (plan.state === "STALE") {
+      return {
+        title: "The stale gate refused the rollback",
+        detail: "Refresh the deployment baseline, revise the mounted plan, then submit again.",
+        label: "Refresh and revise plan",
+        icon: <RefreshCw aria-hidden="true" size={17} />,
+        onClick: refreshAndRevise,
+      };
+    }
+    if (plan.state === "RECOVERED") {
+      return {
+        title: "The same checkout request now returns 200",
+        detail: "The proof is complete. Reset checkout to 500 only when you want another rehearsal.",
+        label: isLabResetting ? "Starting demo…" : "Replay from checkout 500",
+        icon: <RefreshCw className={isLabResetting ? "spin" : undefined} aria-hidden="true" size={17} />,
+        busy: isLabResetting,
+        onClick: startFreshRehearsal,
+      };
+    }
+    if (plan.state === "SUBMITTING") {
+      return {
+        title: "Controller is checking the approved page state",
+        detail: "The stale gate runs before any rollback write, then verifies the same checkout request.",
+        label: "Checking approval…",
+        icon: <RefreshCw className="spin" aria-hidden="true" size={17} />,
+        disabled: true,
+        onClick: () => undefined,
+      };
+    }
+    return {
+      title: "Recovery was not verified",
+      detail: "Return to the mounted plan, inspect the visible values, and decide whether to try again.",
+      label: "Return to Recovery Plan",
+      icon: <UserRound aria-hidden="true" size={17} />,
+      onClick: reviewRecoveryPlan,
+    };
+  })();
 
   return (
     <div className="app-shell">
@@ -620,15 +773,6 @@ export default function App() {
             <div className="product-actions">
               <button
                 type="button"
-                className="primary-button hero-primary"
-                onClick={startFreshRehearsal}
-                disabled={isIncidentLoading || isLabResetting}
-              >
-                <Activity aria-hidden="true" size={17} />
-                {isLabResetting ? "Starting demo…" : "Start 100-second demo"}
-              </button>
-              <button
-                type="button"
                 className="text-button hero-secondary"
                 onClick={(event) => {
                   explainerOpenerRef.current = event.currentTarget;
@@ -658,6 +802,7 @@ export default function App() {
           availableStep={availableStep}
           state={plan.state}
           webMcpStatus={webMcpStatus}
+          humanAction={humanAction}
           onStepChange={goToStep}
         />
 
@@ -694,7 +839,6 @@ export default function App() {
                 isLoading={isIncidentLoading}
                 isResetting={isLabResetting}
                 resetError={labResetError}
-                onStartFresh={startFreshRehearsal}
               />
             </div>
 
@@ -724,17 +868,6 @@ export default function App() {
                     onSelect={actions.selectService}
                   />
                 ))}
-              </div>
-              <div className="stage-actions stage-actions-forward">
-                <span>Next, let the agent compare the deployment that introduced the 500.</span>
-                <button
-                  type="button"
-                  className="primary-button compact-primary"
-                  onClick={() => goToStep(2)}
-                  disabled={isIncidentLoading || isLabResetting}
-                >
-                  Diagnose the change <ArrowRight aria-hidden="true" size={17} />
-                </button>
               </div>
             </section>
 
@@ -792,25 +925,6 @@ export default function App() {
                   <span>{incident.evidenceGaps.join(" ")}</span>
                 </div>
               )}
-              <div className="stage-actions">
-                <button type="button" className="secondary-button" onClick={() => goToStep(1)}>
-                  <ArrowLeft aria-hidden="true" size={17} /> Back to evidence
-                </button>
-                {selectedChange ? (
-                  <button type="button" className="primary-button compact-primary" onClick={() => goToStep(3)}>
-                    Review Recovery Plan <ArrowRight aria-hidden="true" size={17} />
-                  </button>
-                ) : (
-                  <button
-                    type="button"
-                    className="primary-button compact-primary"
-                    onClick={openSuspectedChange}
-                    disabled={isIncidentLoading || isLabResetting}
-                  >
-                    Show change comparison <ArrowRight aria-hidden="true" size={17} />
-                  </button>
-                )}
-              </div>
             </section>
           </div>
 
@@ -1049,26 +1163,6 @@ export default function App() {
                 <p className="activity-empty">
                   Agent preparation, human edits, refusals, and verified recovery will remain visible here.
                 </p>
-              )}
-            </div>
-            <div className="stage-actions step-4-only">
-              {plan.state === "STALE" ? (
-                <button type="button" className="primary-button compact-primary" onClick={refreshAndRevise}>
-                  Refresh evidence and revise plan <ArrowRight aria-hidden="true" size={17} />
-                </button>
-              ) : plan.state === "RECOVERED" ? (
-                <button
-                  type="button"
-                  className="primary-button compact-primary"
-                  onClick={startFreshRehearsal}
-                  disabled={isLabResetting}
-                >
-                  <RefreshCw aria-hidden="true" size={17} /> Replay from checkout 500
-                </button>
-              ) : (
-                <button type="button" className="secondary-button" onClick={() => goToStep(3)}>
-                  <ArrowLeft aria-hidden="true" size={17} /> Return to plan
-                </button>
               )}
             </div>
           </section>

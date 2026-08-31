@@ -45,6 +45,16 @@ const liveIncident: IncidentSummary = {
   evidenceMode: "LIVE",
 };
 
+const healthyIncident: IncidentSummary = {
+  ...liveIncident,
+  health: { checkout: "HEALTHY", payment: "HEALTHY" },
+  activeDeployments: {
+    ...liveIncident.activeDeployments,
+    checkout: "rollback-deployment-id",
+  },
+  suspectedChangeIds: [],
+};
+
 function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
     status,
@@ -107,12 +117,24 @@ describe("Incident Room acceptance", () => {
     const view = renderApp();
     await waitFor(() => expect(screen.getByText("Ready · checkout 500")).toBeTruthy());
 
-    const labCard = screen.getByRole("region", { name: "Dedicated Cloudflare rehearsal lab" });
-    const startButton = within(labCard).getByRole("button", { name: "Start 100-second demo" });
+    const incidentTrack = screen.getByRole("region", {
+      name: "500 observed → change found → human approval → 200 verified",
+    });
+    const humanAction = within(incidentTrack).getByLabelText("Human next action");
+    const startButton = within(humanAction).getByRole("button", { name: "Start 100-second demo" });
     expect(startButton.closest("[toolname]")).toBeNull();
+    expect(
+      within(screen.getByRole("region", { name: "Dedicated Cloudflare rehearsal lab" }))
+        .queryByRole("button", { name: "Start 100-second demo" }),
+    ).toBeNull();
+    startButton.focus();
     fireEvent.click(startButton);
+    expect(document.activeElement).toBe(startButton);
+    expect(startButton.getAttribute("aria-disabled")).toBe("true");
 
     await waitFor(() => expect(screen.getByText("Fresh rehearsal verified")).toBeTruthy());
+    expect(document.activeElement).toBe(startButton);
+    expect(startButton.hasAttribute("aria-disabled")).toBe(false);
     expect(screen.getAllByText("fresh-deployment-id").length).toBeGreaterThanOrEqual(1);
     expect(screen.getByText(/checkout returned 500; payment remained healthy/i)).toBeTruthy();
     expect(harness.tools).toHaveLength(2);
@@ -166,7 +188,8 @@ describe("Incident Room acceptance", () => {
     const productIntro = screen.getByRole("region", {
       name: "One live Recovery Plan. Agent prepares it. Human decides.",
     });
-    expect(within(productIntro).getByRole("button", { name: "Start 100-second demo" })).toBeTruthy();
+    expect(within(productIntro).queryByRole("button", { name: "Start 100-second demo" })).toBeNull();
+    expect(within(productIntro).getByRole("button", { name: "See the 3 steps" })).toBeTruthy();
     expect(screen.getByText("500 observed")).toBeTruthy();
     expect(screen.getByText("PLAN_STALE if superseded · no write")).toBeTruthy();
     expect(screen.getByText("200 verified")).toBeTruthy();
@@ -259,10 +282,27 @@ describe("Incident Room acceptance", () => {
   });
 
   test("guides one visible recovery step while keeping the shared form mounted", async () => {
+    const reset: LabResetResult = {
+      status: "READY",
+      resetDeploymentId: "fresh-deployment-id",
+      checkoutVersionId: "broken-version-id",
+      checkoutStatus: 500,
+      paymentVersionId: "payment-version-id",
+      paymentHealth: "HEALTHY",
+      checkedAt: "2026-08-30T11:01:00Z",
+      message: "Fresh rehearsal ready. Checkout returns 500 while payment remains healthy.",
+    };
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) =>
+      String(input) === "/api/lab/reset" ? jsonResponse(reset) : jsonResponse(liveIncident),
+    ));
     const view = renderApp();
     await waitFor(() => expect(screen.getByText("Cloudflare lab")).toBeTruthy());
 
     const main = screen.getByRole("main");
+    const incidentTrack = screen.getByRole("region", {
+      name: "500 observed → change found → human approval → 200 verified",
+    });
+    const humanAction = within(incidentTrack).getByLabelText("Human next action");
     const form = view.container.querySelector(
       'form[toolname="prepare_recovery_rehearsal"]',
     ) as HTMLFormElement;
@@ -276,19 +316,26 @@ describe("Incident Room acceptance", () => {
     expect(main.getAttribute("data-active-step")).toBe("1");
     expect(view.container.contains(form)).toBe(true);
 
-    fireEvent.click(screen.getByRole("button", { name: "Diagnose the change" }));
+    fireEvent.click(within(humanAction).getByRole("button", { name: "Start 100-second demo" }));
+    const diagnoseButton = await within(humanAction).findByRole("button", {
+      name: "Diagnose the change",
+    });
+    diagnoseButton.focus();
+    fireEvent.click(diagnoseButton);
     expect(main.getAttribute("data-active-step")).toBe("2");
+    expect(humanAction.contains(document.activeElement)).toBe(true);
     expect(screen.getByRole("button", { name: /step 2: diagnose/i }).getAttribute("aria-current")).toBe("step");
     expect(screen.getByLabelText("Current WebMCP handoff").textContent).toContain("show_change_comparison");
     expect(screen.getByText("Waiting for deployment comparison")).toBeTruthy();
     expect(view.container.contains(form)).toBe(true);
 
-    fireEvent.click(screen.getByRole("button", { name: "Show change comparison" }));
+    fireEvent.click(within(humanAction).getByRole("button", { name: "Show change comparison" }));
     await waitFor(() => expect(screen.getByText("response status: 200 → 500")).toBeTruthy());
     expect(screen.getAllByText("Human opened deployment evidence").length).toBeGreaterThanOrEqual(1);
     expect(screen.queryByText("Agent called show_change_comparison")).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: "Review Recovery Plan" }));
-    await waitFor(() => expect(document.activeElement?.id).toBe("plan-title"));
+    expect(humanAction.contains(document.activeElement)).toBe(true);
+    fireEvent.click(within(humanAction).getByRole("button", { name: "Review Recovery Plan" }));
+    await waitFor(() => expect(document.activeElement?.id).toBe("scopeMode"));
     expect(screen.getByText("Default plan values are ready for human review")).toBeTruthy();
     expect(screen.queryByText("Agent prepared this live form")).toBeNull();
 
@@ -440,10 +487,16 @@ describe("Incident Room acceptance", () => {
     await act(async () => firstRespondWith.mock.calls[0][0]);
     expect(screen.getAllByText("PLAN_STALE").length).toBeGreaterThanOrEqual(1);
 
-    fireEvent.click(screen.getByRole("button", { name: "Refresh evidence" }));
+    const incidentTrack = screen.getByRole("region", {
+      name: "500 observed → change found → human approval → 200 verified",
+    });
+    fireEvent.click(within(incidentTrack).getByRole("button", {
+      name: "Refresh and revise plan",
+    }));
     await waitFor(() =>
       expect(screen.getAllByText("concurrent-version-id").length).toBeGreaterThanOrEqual(1),
     );
+    await waitFor(() => expect(document.activeElement?.id).toBe("scopeMode"));
     expect(screen.getAllByText("PLAN_STALE").length).toBeGreaterThanOrEqual(1);
 
     const secondRespondWith = vi.fn();
@@ -458,12 +511,81 @@ describe("Incident Room acceptance", () => {
     expect(screen.getAllByText("PLAN_STALE").length).toBeGreaterThanOrEqual(1);
     expect(screen.getByText("Recovery proved by the same checkout request")).toBeTruthy();
     expect(screen.getByText("Recovered · restart to replay")).toBeTruthy();
+    expect(within(incidentTrack).getByRole("button", {
+      name: "Replay from checkout 500",
+    })).toBeTruthy();
     expect(
       (screen.getByRole("button", {
         name: "Start 100-second demo first",
       }) as HTMLButtonElement).disabled,
     ).toBe(true);
     expect(incidentReads).toBe(3);
+  });
+
+  test("keeps a fresh rehearsal entry point after an agent inspects recovered health", async () => {
+    const recovered: RecoveryResult = {
+      status: "RECOVERED",
+      currentDeploymentId: "broken-version-id",
+      executionDeploymentId: "rollback-deployment-id",
+      healthBefore: 500,
+      healthAfter: 200,
+      message: "Checkout recovered. The fixed request changed from 500 to 200.",
+    };
+    const reset: LabResetResult = {
+      status: "READY",
+      resetDeploymentId: "fresh-deployment-id",
+      checkoutVersionId: "broken-version-id",
+      checkoutStatus: 500,
+      paymentVersionId: "payment-version-id",
+      paymentHealth: "HEALTHY",
+      checkedAt: "2026-08-30T11:03:00Z",
+      message: "Fresh rehearsal ready. Checkout returns 500 while payment remains healthy.",
+    };
+    let incidentReads = 0;
+    let resetRequested = false;
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url === "/api/lab/reset") {
+        resetRequested = true;
+        return jsonResponse(reset);
+      }
+      if (init?.method === "POST") return jsonResponse(recovered);
+      incidentReads += 1;
+      if (incidentReads === 1 || resetRequested) return jsonResponse(liveIncident);
+      return jsonResponse(healthyIncident);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const harness = modelContextHarness();
+    const view = renderApp();
+    await waitFor(() => expect(harness.tools).toHaveLength(2));
+
+    const form = view.container.querySelector(
+      'form[toolname="prepare_recovery_rehearsal"]',
+    ) as HTMLFormElement;
+    fireEvent.submit(form);
+    await waitFor(() => expect(screen.getByText("Recovery verified")).toBeTruthy());
+
+    const inspect = harness.tools.find((tool) => tool.name === "inspect_current_incident")!;
+    await act(async () => {
+      await inspect.execute({ sinceMinutes: 10 });
+    });
+
+    const incidentTrack = screen.getByRole("region", {
+      name: "500 observed → change found → human approval → 200 verified",
+    });
+    expect(within(incidentTrack).getByRole("button", {
+      name: "Restart from checkout 500",
+    })).toBeTruthy();
+    expect((screen.getByLabelText("Recovery scope") as HTMLSelectElement).disabled).toBe(true);
+
+    fireEvent.click(within(incidentTrack).getByRole("button", {
+      name: "Restart from checkout 500",
+    }));
+    await waitFor(() => expect(screen.getByText("Fresh rehearsal verified")).toBeTruthy());
+    expect(resetRequested).toBe(true);
+    expect(within(incidentTrack).getByRole("button", {
+      name: "Diagnose the change",
+    })).toBeTruthy();
   });
 
   test("shows declarative tool cancellation without submitting", async () => {

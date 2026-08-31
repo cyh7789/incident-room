@@ -26,6 +26,7 @@ import type {
 } from "./domain";
 import { useIncidentRoom } from "./useIncidentRoom";
 import { useWebMcpTools } from "./webmcp";
+import type { WebMcpStatus } from "./webmcp";
 
 interface AgentSubmitEvent extends SubmitEvent {
   agentInvoked?: boolean;
@@ -99,31 +100,74 @@ function ServiceButton({
 }
 
 type GuidedStep = 1 | 2 | 3 | 4;
-type GettingStartedTab = "use" | "surface" | "install";
+type GettingStartedTab = "use" | "install";
 
 const guidedSteps: Array<{
   id: GuidedStep;
   label: string;
   detail: string;
   icon: ReactNode;
+  surfaceCue: string;
+  surfaceName: string;
+  surfaceKind: string;
+  surfaceDetail: string;
 }> = [
-  { id: 1, label: "Observe", detail: "Live 500", icon: <Activity aria-hidden="true" size={18} /> },
-  { id: 2, label: "Diagnose", detail: "Compare change", icon: <GitCompareArrows aria-hidden="true" size={18} /> },
-  { id: 3, label: "Approve", detail: "Human decides", icon: <UserRound aria-hidden="true" size={18} /> },
-  { id: 4, label: "Verify", detail: "Prove 500 → 200", icon: <ShieldCheck aria-hidden="true" size={18} /> },
+  {
+    id: 1,
+    label: "Observe",
+    detail: "Live 500",
+    icon: <Activity aria-hidden="true" size={18} />,
+    surfaceCue: "Next agent call",
+    surfaceName: "inspect_current_incident",
+    surfaceKind: "Read only",
+    surfaceDetail: "Reads live health and deployment IDs, then focuses checkout on this page.",
+  },
+  {
+    id: 2,
+    label: "Diagnose",
+    detail: "Compare change",
+    icon: <GitCompareArrows aria-hidden="true" size={18} />,
+    surfaceCue: "Next agent call",
+    surfaceName: "show_change_comparison",
+    surfaceKind: "Read only",
+    surfaceDetail: "Uses the suspected change ID and renders the deployment comparison here.",
+  },
+  {
+    id: 3,
+    label: "Approve",
+    detail: "Human decides",
+    icon: <UserRound aria-hidden="true" size={18} />,
+    surfaceCue: "Shared page handoff",
+    surfaceName: "prepare_recovery_rehearsal",
+    surfaceKind: "Declarative form · human submit",
+    surfaceDetail: "The agent fills the mounted plan. The human changes scope and personally submits it.",
+  },
+  {
+    id: 4,
+    label: "Verify",
+    detail: "Prove 500 → 200",
+    icon: <ShieldCheck aria-hidden="true" size={18} />,
+    surfaceCue: "Synchronous proof",
+    surfaceName: "Controller response",
+    surfaceKind: "No agent write tool",
+    surfaceDetail: "The form response proves PLAN_STALE with no write, or the same request changing from 500 to 200.",
+  },
 ];
 
 function GuidedProgress({
   activeStep,
   availableStep,
   state,
+  webMcpStatus,
   onStepChange,
 }: {
   activeStep: GuidedStep;
   availableStep: GuidedStep;
   state: RecoveryPlan["state"];
+  webMcpStatus: WebMcpStatus;
   onStepChange: (step: GuidedStep) => void;
 }) {
+  const activeSurface = guidedSteps[activeStep - 1];
   const status = state === "STALE"
     ? {
         mode: "blocked",
@@ -167,13 +211,22 @@ function GuidedProgress({
                 };
 
   return (
-    <section className={`guided-progress guided-${status.mode}`} aria-labelledby="guided-title">
+    <section
+      id="live-incident-track"
+      className={`guided-progress guided-${status.mode}`}
+      aria-labelledby="guided-title"
+    >
       <div className="guided-progress-heading">
         <div>
           <p className="eyebrow">Live incident track</p>
           <h2 id="guided-title">500 observed → change found → human approval → 200 verified</h2>
         </div>
-        <span className="guided-count">Step {activeStep} of 4</span>
+        <div className="guided-heading-status">
+          <span className={`guided-webmcp-status webmcp-${webMcpStatus.toLowerCase()}`}>
+            <CircleDot aria-hidden="true" size={12} /> WebMCP {webMcpStatus.toLowerCase()}
+          </span>
+          <span className="guided-count">Step {activeStep} of 4</span>
+        </div>
       </div>
       <ol className="guided-stepper" aria-label="Recovery rehearsal steps">
         {guidedSteps.map((step) => {
@@ -187,20 +240,37 @@ function GuidedProgress({
                 onClick={() => onStepChange(step.id)}
                 disabled={!isAvailable}
                 aria-current={isCurrent ? "step" : undefined}
-                aria-label={`Step ${step.id}: ${step.label}. ${step.detail}`}
+                aria-label={`Step ${step.id}: ${step.label}. ${step.detail}. ${step.surfaceCue}: ${step.surfaceName}`}
               >
                 <span className="guided-step-icon">
                   {isComplete ? <CheckCircle2 aria-hidden="true" size={18} /> : step.icon}
                 </span>
-                <span><strong>{step.label}</strong><small>{step.detail}</small></span>
+                <span className="guided-step-copy">
+                  <strong>{step.label}</strong>
+                  <small>{step.detail}</small>
+                  <code>{step.surfaceName}</code>
+                </span>
               </button>
             </li>
           );
         })}
       </ol>
-      <div className="guided-live-status" role="status" aria-live="polite">
-        <span aria-hidden="true" />
-        <div><strong>{status.title}</strong><p>{status.detail}</p></div>
+      <div className="guided-handoff-grid">
+        <div className="guided-surface-handoff" aria-label="Current WebMCP handoff">
+          <div className="guided-surface-heading">
+            <span>{activeSurface.surfaceCue}</span>
+            <small>{activeSurface.surfaceKind}</small>
+          </div>
+          <div className="guided-surface-name">
+            {activeStep < 4 ? <Bot aria-hidden="true" size={16} /> : <ShieldCheck aria-hidden="true" size={16} />}
+            <code>{activeSurface.surfaceName}</code>
+          </div>
+          <p>{activeSurface.surfaceDetail}</p>
+        </div>
+        <div className="guided-live-status" role="status" aria-live="polite">
+          <span aria-hidden="true" />
+          <div><strong>{status.title}</strong><p>{status.detail}</p></div>
+        </div>
       </div>
     </section>
   );
@@ -537,25 +607,18 @@ export default function App() {
                   ? "Cloudflare lab"
                   : "Local fixture"}
             </span>
-            <button
-              type="button"
+            <a
+              href="#live-incident-track"
               className={`runtime-badge webmcp-surface-trigger webmcp-${webMcpStatus.toLowerCase()}`}
               aria-label={showsRegisteredWebMcpSurface
-                ? "Open WebMCP surface: 2 tools and 1 declarative form"
-                : `Open WebMCP surface details: WebMCP ${webMcpStatus.toLowerCase()}`}
-              aria-haspopup="dialog"
-              aria-expanded={isExplainerOpen && gettingStartedTab === "surface"}
-              onClick={(event) => {
-                explainerOpenerRef.current = event.currentTarget;
-                setGettingStartedTab("surface");
-                setIsExplainerOpen(true);
-              }}
+                ? "Jump to Live incident track: 2 tools and 1 declarative form"
+                : `View Live incident track: WebMCP ${webMcpStatus.toLowerCase()}`}
             >
               <Bot aria-hidden="true" size={14} />
               {showsRegisteredWebMcpSurface
-                ? "WebMCP · 2 tools"
+                ? "WebMCP · 2 tools + 1 form"
                 : `WebMCP ${webMcpStatus.toLowerCase()}`}
-            </button>
+            </a>
           </div>
         </div>
       </header>
@@ -609,6 +672,7 @@ export default function App() {
           activeStep={activeStep}
           availableStep={availableStep}
           state={plan.state}
+          webMcpStatus={webMcpStatus}
           onStepChange={goToStep}
         />
 
@@ -1058,7 +1122,7 @@ export default function App() {
             </header>
 
             <p id="explainer-summary" className="explainer-summary">
-              Run the live proof, inspect the exact WebMCP surface, or clone the project.
+              Run the live proof or clone the project. Tool calls stay visible in the Live incident track.
             </p>
 
             <div
@@ -1068,7 +1132,7 @@ export default function App() {
               onKeyDown={(event) => {
                 if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
                 event.preventDefault();
-                const tabs: GettingStartedTab[] = ["use", "surface", "install"];
+                const tabs: GettingStartedTab[] = ["use", "install"];
                 const currentIndex = tabs.indexOf(gettingStartedTab);
                 const offset = event.key === "ArrowRight" ? 1 : -1;
                 const nextTab = tabs[(currentIndex + offset + tabs.length) % tabs.length];
@@ -1081,7 +1145,6 @@ export default function App() {
             >
               {([
                 ["use", "Try live demo"],
-                ["surface", "WebMCP surface"],
                 ["install", "Run your own"],
               ] as Array<[GettingStartedTab, string]>).map(([tab, label]) => (
                 <button
@@ -1125,44 +1188,7 @@ export default function App() {
                   <ShieldCheck aria-hidden="true" size={18} />
                   <p><strong>Expected proof</strong><span>Base: 500 → rollback → 200. If the deployment changes first: PLAN_STALE → no write.</span></p>
                 </div>
-              </div>
-            )}
-
-            {gettingStartedTab === "surface" && (
-              <div
-                id="getting-started-panel-surface"
-                className="explainer-panel"
-                role="tabpanel"
-                aria-labelledby="getting-started-tab-surface"
-              >
-                <div className="tool-surface-heading">
-                  <div>
-                    <p className="eyebrow">Registered on this live page</p>
-                    <h3>Two read tools, then one shared form</h3>
-                  </div>
-                  <span className={`tool-surface-status webmcp-${webMcpStatus.toLowerCase()}`}>
-                    <CircleDot aria-hidden="true" size={14} />
-                    {showsRegisteredWebMcpSurface ? "Native browser tools connected" : `WebMCP ${webMcpStatus.toLowerCase()}`}
-                  </span>
-                </div>
-                <ol className="tool-surface-list" aria-label="WebMCP execution surface">
-                  <li>
-                    <span className="tool-order">01</span>
-                    <div><code>inspect_current_incident</code><p>Reads live incident health and active deployments, then focuses the affected service on this page.</p></div>
-                    <small className="tool-kind tool-kind-read">Read only</small>
-                  </li>
-                  <li>
-                    <span className="tool-order">02</span>
-                    <div><code>show_change_comparison</code><p>Uses the suspected change ID from step 01 and renders the deployment comparison on this page.</p></div>
-                    <small className="tool-kind tool-kind-read">Read only</small>
-                  </li>
-                  <li>
-                    <span className="tool-order">03</span>
-                    <div><code>prepare_recovery_rehearsal</code><p>Fills the mounted Recovery Plan for review. It has no <code>toolautosubmit</code>.</p></div>
-                    <small className="tool-kind tool-kind-form">Declarative · human submit</small>
-                  </li>
-                </ol>
-                <div className="tool-compatibility">
+                <div className="browser-compatibility">
                   <Bot aria-hidden="true" size={19} />
                   <div>
                     <strong>Browser compatibility</strong>

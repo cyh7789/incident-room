@@ -58,6 +58,7 @@ Deploy `checkout-broken` and `payment-healthy` at 100%, then record both public 
 ## Current boundary
 
 - WebMCP exposes two imperative tools and one declarative Recovery Plan form.
+- The Live incident track previews the next tool or form handoff at each recovery step.
 - `inspect_current_incident` reads the live incident and focuses the affected service; `show_change_comparison` renders the selected deployment change. Both are annotated read-only and untrusted-content.
 - The form intentionally omits `toolautosubmit`; the operator must press Submit.
 - The reset control is a normal human page action, not a WebMCP tool. It writes only the allowlisted broken checkout version and verifies checkout 500 before reporting READY.

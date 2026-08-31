@@ -143,16 +143,17 @@ describe("Incident Room acceptance", () => {
     ).not.toBeNull();
   });
 
-  test("does not claim a registered WebMCP surface in unsupported browsers", async () => {
+  test("does not claim a registered WebMCP path in unsupported browsers", async () => {
     const view = renderApp();
 
     await waitFor(() => expect(view.container.querySelector(".webmcp-unsupported")).not.toBeNull());
     expect(view.container.querySelector(".webmcp-unsupported")?.textContent?.trim()).toBe(
       "WebMCP unsupported",
     );
-    expect(screen.getByRole("button", {
-      name: "Open WebMCP surface details: WebMCP unsupported",
-    })).toBeTruthy();
+    const pathLink = screen.getByRole("link", {
+      name: "View Live incident track: WebMCP unsupported",
+    });
+    expect(pathLink.getAttribute("href")).toBe("#live-incident-track");
   });
 
   test("onboards people into the live demo, local install, and WebMCP boundary", async () => {
@@ -170,6 +171,17 @@ describe("Incident Room acceptance", () => {
     expect(screen.getByText("500 observed")).toBeTruthy();
     expect(screen.getByText("PLAN_STALE if superseded · no write")).toBeTruthy();
     expect(screen.getByText("200 verified")).toBeTruthy();
+    const incidentTrack = screen.getByRole("region", {
+      name: "500 observed → change found → human approval → 200 verified",
+    });
+    expect(incidentTrack.getAttribute("id")).toBe("live-incident-track");
+    expect(within(incidentTrack).getAllByText("inspect_current_incident").length).toBeGreaterThanOrEqual(1);
+    expect(within(incidentTrack).getAllByText("show_change_comparison").length).toBeGreaterThanOrEqual(1);
+    expect(within(incidentTrack).getAllByText("prepare_recovery_rehearsal").length).toBeGreaterThanOrEqual(1);
+    expect(within(incidentTrack).getAllByText("Controller response").length).toBeGreaterThanOrEqual(1);
+    const handoff = within(incidentTrack).getByLabelText("Current WebMCP handoff");
+    expect(within(handoff).getByText("Next agent call")).toBeTruthy();
+    expect(within(handoff).getByText("Read only")).toBeTruthy();
 
     const trigger = screen.getByRole("button", { name: "Get started" });
     fireEvent.click(trigger);
@@ -185,20 +197,11 @@ describe("Incident Room acceptance", () => {
     expect(within(dialog).getByText(/then prepare a recovery plan for me to review/i)).toBeTruthy();
     expect(within(dialog).getByText(/change recovery scope to checkout only/i)).toBeTruthy();
     expect(within(dialog).getByText(/Base: 500.*rollback.*200.*deployment changes first.*PLAN_STALE.*no write/i)).toBeTruthy();
-
-    liveTab.focus();
-    fireEvent.keyDown(liveTab, { key: "ArrowRight" });
-    await waitFor(() => expect(document.activeElement?.id).toBe("getting-started-tab-surface"));
-    expect(within(dialog).getByRole("tab", { name: "WebMCP surface" }).getAttribute("aria-selected")).toBe("true");
-    expect(within(dialog).getByText("inspect_current_incident")).toBeTruthy();
-    expect(within(dialog).getByText("show_change_comparison")).toBeTruthy();
-    expect(within(dialog).getByText("prepare_recovery_rehearsal")).toBeTruthy();
-    expect(within(dialog).getAllByText("Read only")).toHaveLength(2);
-    expect(within(dialog).getByText("Declarative · human submit")).toBeTruthy();
     expect(within(dialog).getByText(/ChatGPT Site tools currently lists the two imperative tools/i)).toBeTruthy();
     expect(within(dialog).getByText(/Chrome WebMCP also discovers the declarative form/i)).toBeTruthy();
 
-    fireEvent.keyDown(document.activeElement!, { key: "ArrowRight" });
+    liveTab.focus();
+    fireEvent.keyDown(liveTab, { key: "ArrowRight" });
     await waitFor(() => expect(document.activeElement?.id).toBe("getting-started-tab-install"));
     expect(within(dialog).getByRole("tab", { name: "Run your own" }).getAttribute("aria-selected")).toBe("true");
     expect(within(dialog).getByText(/git clone https:\/\/github.com\/cyh7789\/incident-room.git/i)).toBeTruthy();
@@ -224,11 +227,10 @@ describe("Incident Room acceptance", () => {
     expect(screen.queryByRole("dialog", { name: "Get started with Incident Room" })).toBeNull();
     expect(document.activeElement).toBe(trigger);
 
-    const surfaceTrigger = screen.getByRole("button", {
-      name: "Open WebMCP surface: 2 tools and 1 declarative form",
+    const pathLink = screen.getByRole("link", {
+      name: "Jump to Live incident track: 2 tools and 1 declarative form",
     });
-    fireEvent.click(surfaceTrigger);
-    expect(screen.getByRole("tab", { name: "WebMCP surface" }).getAttribute("aria-selected")).toBe("true");
+    expect(pathLink.getAttribute("href")).toBe("#live-incident-track");
   });
 
   test("webmcp/shared-visible-state", async () => {
@@ -271,12 +273,14 @@ describe("Incident Room acceptance", () => {
     expect(screen.getByRole("heading", { name: "Recovery Plan" })).toBeTruthy();
     expect(screen.getByText("Recovery Plan not drafted yet")).toBeTruthy();
     expect(screen.getByRole("button", { name: /step 1: observe/i }).getAttribute("aria-current")).toBe("step");
+    expect(screen.getByLabelText("Current WebMCP handoff").textContent).toContain("inspect_current_incident");
     expect(main.getAttribute("data-active-step")).toBe("1");
     expect(view.container.contains(form)).toBe(true);
 
     fireEvent.click(screen.getByRole("button", { name: "Diagnose the change" }));
     expect(main.getAttribute("data-active-step")).toBe("2");
     expect(screen.getByRole("button", { name: /step 2: diagnose/i }).getAttribute("aria-current")).toBe("step");
+    expect(screen.getByLabelText("Current WebMCP handoff").textContent).toContain("show_change_comparison");
     expect(screen.getByText("Waiting for deployment comparison")).toBeTruthy();
     expect(view.container.contains(form)).toBe(true);
 
@@ -299,6 +303,8 @@ describe("Incident Room acceptance", () => {
     });
     expect(main.getAttribute("data-active-step")).toBe("3");
     expect(screen.getByRole("button", { name: /step 3: approve/i }).getAttribute("aria-current")).toBe("step");
+    expect(screen.getByLabelText("Current WebMCP handoff").textContent).toContain("prepare_recovery_rehearsal");
+    expect(screen.getByLabelText("Current WebMCP handoff").textContent).toContain("human submit");
     expect(screen.getByText("Agent draft is visible in this tab")).toBeTruthy();
     expect(screen.getByText("Agent prepared this live form")).toBeTruthy();
     expect(view.container.contains(form)).toBe(true);

@@ -7,6 +7,11 @@ import worker, { type Env } from "../../worker/index";
 
 interface RegisteredTool {
   name: string;
+  description: string;
+  annotations?: {
+    readOnlyHint?: boolean;
+    untrustedContentHint?: boolean;
+  };
   execute: (input: Record<string, unknown>) => unknown | Promise<unknown>;
 }
 
@@ -128,6 +133,10 @@ describe("Incident Room acceptance", () => {
       "inspect_current_incident",
       "show_change_comparison",
     ]);
+    expect(harness.tools.map((tool) => tool.annotations)).toEqual([
+      { readOnlyHint: true, untrustedContentHint: true },
+      { readOnlyHint: true, untrustedContentHint: true },
+    ]);
     expect(
       view.container.querySelector('form[toolname="prepare_recovery_rehearsal"]'),
     ).not.toBeNull();
@@ -140,37 +149,52 @@ describe("Incident Room acceptance", () => {
     expect(view.container.querySelector(".webmcp-unsupported")?.textContent?.trim()).toBe(
       "WebMCP unsupported",
     );
+    expect(screen.getByRole("button", {
+      name: "Open WebMCP surface details: WebMCP unsupported",
+    })).toBeTruthy();
   });
 
   test("onboards people into the live demo, local install, and WebMCP boundary", async () => {
+    modelContextHarness();
     renderApp();
 
     expect(screen.getByRole("heading", {
       level: 1,
       name: "One live Recovery Plan. Agent prepares it. Human decides.",
     })).toBeTruthy();
-    expect(screen.getByText("The shared page is the handoff.")).toBeTruthy();
-    expect(screen.getByText("Reads evidence")).toBeTruthy();
-    expect(screen.getByText("Carries the live plan")).toBeTruthy();
-    expect(screen.getByText("Edits + submits")).toBeTruthy();
-    expect(screen.getByText("Checks, writes + verifies")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Start 100-second demo" })).toBeTruthy();
+    expect(screen.getByText("500 observed")).toBeTruthy();
+    expect(screen.getByText("PLAN_STALE if superseded · no write")).toBeTruthy();
+    expect(screen.getByText("200 verified")).toBeTruthy();
 
     const trigger = screen.getByRole("button", { name: "Get started" });
     fireEvent.click(trigger);
     const dialog = screen.getByRole("dialog", { name: "Get started with Incident Room" });
-    const liveTab = within(dialog).getByRole("tab", { name: "Use live demo" });
+    const liveTab = within(dialog).getByRole("tab", { name: "Try live demo" });
     await waitFor(() => expect(document.activeElement?.getAttribute("aria-label")).toBe(
       "Close Get started",
     ));
     expect(liveTab.getAttribute("aria-selected")).toBe("true");
     expect(within(dialog).getByText("You’re on the live demo.")).toBeTruthy();
+    expect(within(dialog).getByRole("list", { name: "100-second recovery walkthrough" }).children).toHaveLength(3);
     expect(within(dialog).getByText(/start fresh rehearsal/i)).toBeTruthy();
     expect(within(dialog).getByText(/then prepare a recovery plan for me to review/i)).toBeTruthy();
     expect(within(dialog).getByText(/change recovery scope to checkout only/i)).toBeTruthy();
-    expect(within(dialog).getByText(/same checkout request changes from 500 to 200/i)).toBeTruthy();
+    expect(within(dialog).getByText(/Base: 500.*rollback.*200.*deployment changes first.*PLAN_STALE.*no write/i)).toBeTruthy();
 
     liveTab.focus();
     fireEvent.keyDown(liveTab, { key: "ArrowRight" });
+    await waitFor(() => expect(document.activeElement?.id).toBe("getting-started-tab-surface"));
+    expect(within(dialog).getByRole("tab", { name: "WebMCP surface" }).getAttribute("aria-selected")).toBe("true");
+    expect(within(dialog).getByText("inspect_current_incident")).toBeTruthy();
+    expect(within(dialog).getByText("show_change_comparison")).toBeTruthy();
+    expect(within(dialog).getByText("prepare_recovery_rehearsal")).toBeTruthy();
+    expect(within(dialog).getAllByText("Read only")).toHaveLength(2);
+    expect(within(dialog).getByText("Declarative · human submit")).toBeTruthy();
+    expect(within(dialog).getByText(/ChatGPT Site tools currently lists the two imperative tools/i)).toBeTruthy();
+    expect(within(dialog).getByText(/Chrome WebMCP also discovers the declarative form/i)).toBeTruthy();
+
+    fireEvent.keyDown(document.activeElement!, { key: "ArrowRight" });
     await waitFor(() => expect(document.activeElement?.id).toBe("getting-started-tab-install"));
     expect(within(dialog).getByRole("tab", { name: "Run your own" }).getAttribute("aria-selected")).toBe("true");
     expect(within(dialog).getByText(/git clone https:\/\/github.com\/cyh7789\/incident-room.git/i)).toBeTruthy();
@@ -192,14 +216,15 @@ describe("Incident Room acceptance", () => {
     fireEvent.keyDown(window, { key: "Tab" });
     expect(document.activeElement).toBe(closeButton);
 
-    fireEvent.click(within(dialog).getByRole("tab", { name: "Why WebMCP" }));
-    expect(within(dialog).getByText("Where does the data come from?")).toBeTruthy();
-    expect(within(dialog).getByText(/app-owned Cloudflare rehearsal lab/i)).toBeTruthy();
-    expect(within(dialog).getByText(/human personally submits/i)).toBeTruthy();
-    expect(within(dialog).getByText(/scenario controls can prepare only allowlisted lab failures/i)).toBeTruthy();
     fireEvent.keyDown(window, { key: "Escape" });
     expect(screen.queryByRole("dialog", { name: "Get started with Incident Room" })).toBeNull();
     expect(document.activeElement).toBe(trigger);
+
+    const surfaceTrigger = screen.getByRole("button", {
+      name: "Open WebMCP surface: 2 tools and 1 declarative form",
+    });
+    fireEvent.click(surfaceTrigger);
+    expect(screen.getByRole("tab", { name: "WebMCP surface" }).getAttribute("aria-selected")).toBe("true");
   });
 
   test("webmcp/shared-visible-state", async () => {
@@ -421,7 +446,7 @@ describe("Incident Room acceptance", () => {
 
     expect(screen.getByText("Recovery verified")).toBeTruthy();
     expect(screen.getByText(/changed from 500 to 200; deployment rollback-deployment-id/i)).toBeTruthy();
-    expect(screen.getByText("PLAN_STALE")).toBeTruthy();
+    expect(screen.getAllByText("PLAN_STALE").length).toBeGreaterThanOrEqual(1);
     expect(screen.getByText("Recovery proved by the same checkout request")).toBeTruthy();
     expect(screen.getByText("Recovered · restart to replay")).toBeTruthy();
     expect(

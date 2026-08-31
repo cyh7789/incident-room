@@ -12,6 +12,8 @@ Incident Room is a WebMCP-powered recovery rehearsal for a dedicated Cloudflare 
 
 The public site uses one shared dedicated lab, so a later rehearsal can make an older Recovery Plan stale by design.
 
+ChatGPT's built-in browser currently lists the two imperative tools as Site tools. Chrome WebMCP also discovers the declarative Recovery Plan form. In ChatGPT, the agent can fill that visible form through regular browser interaction; in both browsers, the operator personally submits it.
+
 ## Run locally
 
 ```bash
@@ -56,6 +58,7 @@ Deploy `checkout-broken` and `payment-healthy` at 100%, then record both public 
 ## Current boundary
 
 - WebMCP exposes two imperative tools and one declarative Recovery Plan form.
+- `inspect_current_incident` reads the live incident and focuses the affected service; `show_change_comparison` renders the selected deployment change. Both are annotated read-only and untrusted-content.
 - The form intentionally omits `toolautosubmit`; the operator must press Submit.
 - The reset control is a normal human page action, not a WebMCP tool. It writes only the allowlisted broken checkout version and verifies checkout 500 before reporting READY.
 - `POST /api/lab/competing-deployment` is a demo-only scenario control, not a WebMCP tool or Recovery Plan write. It writes only the allowlisted concurrent checkout version used to prove `PLAN_STALE` without rollback.

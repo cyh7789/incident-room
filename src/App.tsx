@@ -8,7 +8,6 @@ import {
   CheckCircle2,
   CircleDot,
   Cloud,
-  Database,
   GitCompareArrows,
   LockKeyhole,
   RefreshCw,
@@ -100,7 +99,7 @@ function ServiceButton({
 }
 
 type GuidedStep = 1 | 2 | 3 | 4;
-type GettingStartedTab = "use" | "install" | "why";
+type GettingStartedTab = "use" | "surface" | "install";
 
 const guidedSteps: Array<{
   id: GuidedStep;
@@ -336,7 +335,7 @@ export default function App() {
   );
   const webMcpStatus = useWebMcpTools(webMcpActions);
   const formRef = useRef<HTMLFormElement>(null);
-  const explainerTriggerRef = useRef<HTMLButtonElement>(null);
+  const explainerOpenerRef = useRef<HTMLButtonElement | null>(null);
   const explainerCloseRef = useRef<HTMLButtonElement>(null);
   const explainerDialogRef = useRef<HTMLElement>(null);
   const [activeStep, setActiveStep] = useState<GuidedStep>(1);
@@ -405,7 +404,7 @@ export default function App() {
     return () => {
       window.removeEventListener("keydown", handleKeyDown);
       document.body.style.overflow = previousOverflow;
-      explainerTriggerRef.current?.focus();
+      explainerOpenerRef.current?.focus();
     };
   }, [isExplainerOpen]);
 
@@ -517,12 +516,12 @@ export default function App() {
         </a>
         <div className="topbar-actions">
           <button
-            ref={explainerTriggerRef}
             type="button"
             className="explainer-trigger"
             aria-haspopup="dialog"
             aria-expanded={isExplainerOpen}
-            onClick={() => {
+            onClick={(event) => {
+              explainerOpenerRef.current = event.currentTarget;
               setGettingStartedTab("use");
               setIsExplainerOpen(true);
             }}
@@ -538,11 +537,25 @@ export default function App() {
                   ? "Cloudflare lab"
                   : "Local fixture"}
             </span>
-            <span className={`runtime-badge webmcp-${webMcpStatus.toLowerCase()}`}>
+            <button
+              type="button"
+              className={`runtime-badge webmcp-surface-trigger webmcp-${webMcpStatus.toLowerCase()}`}
+              aria-label={showsRegisteredWebMcpSurface
+                ? "Open WebMCP surface: 2 tools and 1 declarative form"
+                : `Open WebMCP surface details: WebMCP ${webMcpStatus.toLowerCase()}`}
+              aria-haspopup="dialog"
+              aria-expanded={isExplainerOpen && gettingStartedTab === "surface"}
+              onClick={(event) => {
+                explainerOpenerRef.current = event.currentTarget;
+                setGettingStartedTab("surface");
+                setIsExplainerOpen(true);
+              }}
+            >
               <Bot aria-hidden="true" size={14} />
-              WebMCP {webMcpStatus.toLowerCase()}
-              {showsRegisteredWebMcpSurface ? " · 2 tools + 1 form" : ""}
-            </span>
+              {showsRegisteredWebMcpSurface
+                ? "WebMCP · 2 tools"
+                : `WebMCP ${webMcpStatus.toLowerCase()}`}
+            </button>
           </div>
         </div>
       </header>
@@ -552,24 +565,44 @@ export default function App() {
           <div className="product-intro-copy">
             <p className="eyebrow">Human + agent incident recovery</p>
             <h1 id="product-title">One live Recovery Plan. Agent prepares it. Human decides.</h1>
-            <p>
+            <p className="product-summary">
               Incident Room uses WebMCP so a person and an agent can inspect the same failure,
               edit the same page object, and verify the same checkout request after a guarded rollback.
             </p>
+            <div className="product-actions">
+              <button
+                type="button"
+                className="primary-button hero-primary"
+                onClick={startFreshRehearsal}
+                disabled={isIncidentLoading || isLabResetting}
+              >
+                <Activity aria-hidden="true" size={17} />
+                {isLabResetting ? "Starting demo…" : "Start 100-second demo"}
+              </button>
+              <button
+                type="button"
+                className="text-button hero-secondary"
+                onClick={(event) => {
+                  explainerOpenerRef.current = event.currentTarget;
+                  setGettingStartedTab("use");
+                  setIsExplainerOpen(true);
+                }}
+              >
+                See the 3 steps <ArrowRight aria-hidden="true" size={16} />
+              </button>
+            </div>
           </div>
-          <aside className="product-principle" aria-label="Why WebMCP matters here">
-            <strong>The shared page is the handoff.</strong>
-            <p>No hidden agent-only plan. No autonomous rollback. The visible Recovery Plan is the only shared object.</p>
+          <aside className="product-proof" aria-label="100-second proof chain">
+            <p className="eyebrow">What the judge will see</p>
+            <div className="proof-chain">
+              <span><small>01</small><strong>500 observed</strong></span>
+              <ArrowRight aria-hidden="true" size={15} />
+              <span><small>02</small><strong>PLAN_STALE if superseded · no write</strong></span>
+              <ArrowRight aria-hidden="true" size={15} />
+              <span><small>03</small><strong>200 verified</strong></span>
+            </div>
+            <p>The base path proves 500 → 200. A superseded plan proves <code>PLAN_STALE</code> with no write.</p>
           </aside>
-          <div className="product-causal-chain" aria-label="Incident Room responsibility chain">
-            <span><Bot aria-hidden="true" size={18} /><small>Agent</small><strong>Reads evidence</strong></span>
-            <ArrowRight aria-hidden="true" size={16} />
-            <span><BookOpen aria-hidden="true" size={18} /><small>Shared page</small><strong>Carries the live plan</strong></span>
-            <ArrowRight aria-hidden="true" size={16} />
-            <span><UserRound aria-hidden="true" size={18} /><small>Human</small><strong>Edits + submits</strong></span>
-            <ArrowRight aria-hidden="true" size={16} />
-            <span><ShieldCheck aria-hidden="true" size={18} /><small>Controller</small><strong>Checks, writes + verifies</strong></span>
-          </div>
         </section>
 
         <GuidedProgress
@@ -1025,7 +1058,7 @@ export default function App() {
             </header>
 
             <p id="explainer-summary" className="explainer-summary">
-              Complete one recovery in the hosted lab, run the project locally, or inspect how WebMCP keeps the agent and human on the same page.
+              Run the live proof, inspect the exact WebMCP surface, or clone the project.
             </p>
 
             <div
@@ -1035,7 +1068,7 @@ export default function App() {
               onKeyDown={(event) => {
                 if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
                 event.preventDefault();
-                const tabs: GettingStartedTab[] = ["use", "install", "why"];
+                const tabs: GettingStartedTab[] = ["use", "surface", "install"];
                 const currentIndex = tabs.indexOf(gettingStartedTab);
                 const offset = event.key === "ArrowRight" ? 1 : -1;
                 const nextTab = tabs[(currentIndex + offset + tabs.length) % tabs.length];
@@ -1047,9 +1080,9 @@ export default function App() {
               }}
             >
               {([
-                ["use", "Use live demo"],
+                ["use", "Try live demo"],
+                ["surface", "WebMCP surface"],
                 ["install", "Run your own"],
-                ["why", "Why WebMCP"],
               ] as Array<[GettingStartedTab, string]>).map(([tab, label]) => (
                 <button
                   key={tab}
@@ -1083,13 +1116,59 @@ export default function App() {
                     <p>No account, setup, or visitor token is required. The public rehearsal lab is shared, so another run can make an older plan stale by design.</p>
                   </div>
                 </div>
-                <ol className="onboarding-steps">
-                  <li><span>1</span><div><strong>Use a WebMCP browser</strong><p>Open this site in ChatGPT’s in-app browser or a WebMCP-enabled Chrome browser. The status in the page header should report WebMCP ready.</p></div></li>
-                  <li><span>2</span><div><strong>Start with a verified 500</strong><p>Press <b>Start fresh rehearsal</b> and wait until checkout is degraded, payment is healthy, and the lab reports ready.</p></div></li>
-                  <li><span>3</span><div><strong>Let the agent prepare evidence</strong><p>Ask: “Inspect the current incident, compare the suspected deployment change, then prepare a Recovery Plan for me to review.” The agent calls two tools, then fills the visible Recovery Plan.</p></div></li>
-                  <li><span>4</span><div><strong>Make the human decision</strong><p>Review the mounted form, change Recovery scope to Checkout only, edit the reason if needed, then personally press Submit.</p></div></li>
-                  <li><span>5</span><div><strong>Read the proof</strong><p><code>PLAN_STALE</code> means no rollback was written. Refresh, revise, and submit again; success proves the same checkout request changes from 500 to 200.</p></div></li>
+                <ol className="onboarding-steps" aria-label="100-second recovery walkthrough">
+                  <li><span>1</span><div><strong>Start with a verified 500</strong><p>Press <b>Start fresh rehearsal</b>. The lab proves checkout is degraded while payment remains healthy.</p></div></li>
+                  <li><span>2</span><div><strong>Ask the agent</strong><p>In ChatGPT’s in-app browser or WebMCP-enabled Chrome, ask: “Inspect the current incident, compare the suspected deployment change, then prepare a Recovery Plan for me to review.” The two read tools update this page.</p></div></li>
+                  <li><span>3</span><div><strong>Make the human decision</strong><p>Change Recovery scope to Checkout only, review the reason, and personally press Submit.</p></div></li>
                 </ol>
+                <div className="proof-result">
+                  <ShieldCheck aria-hidden="true" size={18} />
+                  <p><strong>Expected proof</strong><span>Base: 500 → rollback → 200. If the deployment changes first: PLAN_STALE → no write.</span></p>
+                </div>
+              </div>
+            )}
+
+            {gettingStartedTab === "surface" && (
+              <div
+                id="getting-started-panel-surface"
+                className="explainer-panel"
+                role="tabpanel"
+                aria-labelledby="getting-started-tab-surface"
+              >
+                <div className="tool-surface-heading">
+                  <div>
+                    <p className="eyebrow">Registered on this live page</p>
+                    <h3>Two read tools, then one shared form</h3>
+                  </div>
+                  <span className={`tool-surface-status webmcp-${webMcpStatus.toLowerCase()}`}>
+                    <CircleDot aria-hidden="true" size={14} />
+                    {showsRegisteredWebMcpSurface ? "Native browser tools connected" : `WebMCP ${webMcpStatus.toLowerCase()}`}
+                  </span>
+                </div>
+                <ol className="tool-surface-list" aria-label="WebMCP execution surface">
+                  <li>
+                    <span className="tool-order">01</span>
+                    <div><code>inspect_current_incident</code><p>Reads live incident health and active deployments, then focuses the affected service on this page.</p></div>
+                    <small className="tool-kind tool-kind-read">Read only</small>
+                  </li>
+                  <li>
+                    <span className="tool-order">02</span>
+                    <div><code>show_change_comparison</code><p>Uses the suspected change ID from step 01 and renders the deployment comparison on this page.</p></div>
+                    <small className="tool-kind tool-kind-read">Read only</small>
+                  </li>
+                  <li>
+                    <span className="tool-order">03</span>
+                    <div><code>prepare_recovery_rehearsal</code><p>Fills the mounted Recovery Plan for review. It has no <code>toolautosubmit</code>.</p></div>
+                    <small className="tool-kind tool-kind-form">Declarative · human submit</small>
+                  </li>
+                </ol>
+                <div className="tool-compatibility">
+                  <Bot aria-hidden="true" size={19} />
+                  <div>
+                    <strong>Browser compatibility</strong>
+                    <p>ChatGPT Site tools currently lists the two imperative tools. Chrome WebMCP also discovers the declarative form. In ChatGPT, the agent can fill the visible form through regular browser interaction; the human still submits it.</p>
+                  </div>
+                </div>
               </div>
             )}
 
@@ -1134,47 +1213,6 @@ npm run dev:worker`}</code></pre>
               </div>
             )}
 
-            {gettingStartedTab === "why" && (
-              <div
-                id="getting-started-panel-why"
-                className="explainer-panel"
-                role="tabpanel"
-                aria-labelledby="getting-started-tab-why"
-              >
-                <p className="why-intro">This is a live, app-owned Cloudflare rehearsal lab. It demonstrates a guarded recovery handoff, not a general production connector and not an agent acting alone.</p>
-                <div className="explainer-responsibilities">
-                  <article>
-                    <Bot aria-hidden="true" size={21} />
-                    <div><small>Agent</small><h3>Reads and prepares</h3></div>
-                    <p>Two imperative WebMCP tools inspect live evidence and compare the suspected deployment. The agent then fills the visible Declarative Recovery Plan form.</p>
-                  </article>
-                  <article>
-                    <UserRound aria-hidden="true" size={21} />
-                    <div><small>Human</small><h3>Changes and approves</h3></div>
-                    <p>The human personally submits after reviewing every proposed value and narrowing <code>scopeMode</code>. There is no <code>toolautosubmit</code>.</p>
-                  </article>
-                  <article>
-                    <LockKeyhole aria-hidden="true" size={21} />
-                    <div><small>Controller</small><h3>Guards and proves</h3></div>
-                    <p>The Worker checks the deployment baseline and allowlist before any write. It returns <code>PLAN_STALE</code> without rollback, or verifies the same request changed from 500 to 200.</p>
-                  </article>
-                </div>
-                <div className="explainer-faq">
-                  <div>
-                    <Database aria-hidden="true" size={19} />
-                    <span><strong>Where does the data come from?</strong><p>Dedicated checkout and payment Cloudflare Workers owned by this app. Visitors provide no token; payment stays read-only.</p></span>
-                  </div>
-                  <div>
-                    <ShieldCheck aria-hidden="true" size={19} />
-                    <span><strong>Why use WebMCP here?</strong><p>The agent and person operate the same mounted Recovery Plan on the live page, so preparation, edits, refusal, and proof stay visible in one place.</p></span>
-                  </div>
-                  <div>
-                    <LockKeyhole aria-hidden="true" size={19} />
-                    <span><strong>What else can write to the lab?</strong><p>Scenario controls can prepare only allowlisted lab failures, including the competing deployment used to prove <code>PLAN_STALE</code>. Only a human-submitted Recovery Plan can write the healthy recovery target.</p></span>
-                  </div>
-                </div>
-              </div>
-            )}
           </section>
         </div>
       )}

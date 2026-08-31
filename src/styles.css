@@ -875,7 +875,7 @@ h2 { margin-bottom: 0; font-size: 1.08rem; line-height: 1.3; letter-spacing: -0.
 .workspace[data-active-step="3"] .guided-stage .evidence-column,
 .workspace[data-active-step="4"] .guided-stage .evidence-column { display: none; }
 .step-observe-source { animation-delay: 35ms; }
-.guided-stage .evidence-panel { width: 100%; padding: 24px; }
+.guided-stage .evidence-panel { min-width: 0; width: 100%; padding: 24px; }
 .guided-stage .recovery-plan { width: 100%; }
 
 .stage-title-block { display: grid; grid-template-columns: auto 1fr; align-items: start; gap: 16px; margin-bottom: 24px; padding-bottom: 20px; border-bottom: 1px solid var(--border); }

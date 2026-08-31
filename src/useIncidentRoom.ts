@@ -256,6 +256,14 @@ export function useIncidentRoom() {
           return nextPlan;
         });
         if (result.status === "RECOVERED") {
+          setRemediation({
+            regressedDeploymentId: result.currentDeploymentId,
+            rootCauseSummary: "The checkout deployment changed the fixed cart response from 200 to 500. The verified rollback restored that same request to 200 while payment stayed healthy.",
+            recommendedPath: "FIX_FORWARD_PR",
+            rationale: "Keep the verified rollback active while engineering reproduces the regression, adds the fixed-cart test, reviews a checkout-only fix, and canary deploys the replacement.",
+            source: "RECOVERY_BASELINE",
+            state: "PROPOSED",
+          });
           try {
             const nextIncident = await fetchCurrentIncident();
             incidentRef.current = nextIncident;
@@ -275,7 +283,7 @@ export function useIncidentRoom() {
     [],
   );
 
-  const proposeRemediationOptions = useCallback((proposal: Omit<RemediationProposal, "state" | "selectedPath">) => {
+  const proposeRemediationOptions = useCallback((proposal: Omit<RemediationProposal, "source" | "state" | "selectedPath">) => {
     const currentPlan = planRef.current;
     if (currentPlan.state !== "RECOVERED" || currentPlan.result?.status !== "RECOVERED") {
       throw new Error("Recovery must be verified before remediation options can be proposed.");
@@ -286,6 +294,7 @@ export function useIncidentRoom() {
 
     const nextProposal: RemediationProposal = {
       ...proposal,
+      source: "AGENT",
       state: "PROPOSED",
     };
     setRemediation(nextProposal);

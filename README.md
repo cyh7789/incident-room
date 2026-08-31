@@ -10,7 +10,7 @@ Incident Room is a WebMCP-powered recovery rehearsal for a dedicated Cloudflare 
 4. Inspect the proposed operation: stale precheck, checkout-only deployment of `checkout-healthy`, no payment write, then the same fixed request must change from 500 to 200.
 5. Change **Recovery scope** to **Checkout only**, edit the reason if needed, then personally press **Submit**.
 6. If the Controller returns `PLAN_STALE`, refresh the evidence, revise the plan, and submit again. Recovery succeeds only when the same fixed checkout request changes from 500 to 200.
-7. After 200 is verified, the agent calls `propose_remediation_options` with its diagnosis, recommendation, and rationale. Compare fix-forward PR, hold-rollback, and emergency-hotfix paths, then record one human choice. Only then does the page produce the matching simulated issue and acceptance steps.
+7. After 200 is verified, the page immediately shows a fix-forward baseline plus hold-rollback and emergency-hotfix alternatives. The agent can call `propose_remediation_options` to replace that baseline with its evidence-backed diagnosis, recommendation, and rationale. A human records the final choice, then the page produces the matching simulated issue and acceptance steps.
 
 The public site uses one shared dedicated lab, so a later rehearsal can make an older Recovery Plan stale by design.
 
@@ -113,7 +113,7 @@ This contract proves the integration boundary without introducing a generic conn
 
 The 100-second path performs the emergency treatment that is safe to demonstrate: an allowlisted checkout rollback followed by same-request verification. A code fix is a separate engineering decision after service recovery.
 
-After a verified rollback, `propose_remediation_options` places three paths on the live page and marks the agent's recommendation: fix forward through a reviewed PR, hold the rollback while investigating, or prepare an emergency hotfix. A person can choose any path. The page then displays a matching simulated issue draft containing the regressed deployment, the 500 → 200 proof, the payment exclusion, and acceptance steps. It does not call GitHub or claim that an issue, PR, or deployment exists.
+After a verified rollback, the page immediately places three paths on the live page: fix forward through a reviewed PR, hold the rollback while investigating, or prepare an emergency hotfix. `propose_remediation_options` can replace the baseline diagnosis and recommendation with the agent's evidence-backed proposal. A person can choose any path. The page then displays a matching simulated issue draft containing the regressed deployment, the 500 → 200 proof, the payment exclusion, and acceptance steps. It does not call GitHub or claim that an issue, PR, or deployment exists.
 
 ## Prepare the included rehearsal Workers
 

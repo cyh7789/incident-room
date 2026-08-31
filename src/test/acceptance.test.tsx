@@ -573,10 +573,15 @@ describe("Incident Room acceptance", () => {
     expect(screen.getByText("Recovery verified")).toBeTruthy();
     expect(screen.getByText(/changed from 500 to 200; deployment rollback-deployment-id/i)).toBeTruthy();
     expect(screen.getAllByText("PLAN_STALE").length).toBeGreaterThanOrEqual(1);
-    expect(screen.getByText("Recovery is verified; permanent remediation is still open")).toBeTruthy();
+    expect(screen.getByText("A repair baseline is ready; the agent can refine it")).toBeTruthy();
     expect(screen.getByText("Recovered · restart to replay")).toBeTruthy();
     expect(screen.getByRole("main").getAttribute("data-active-step")).toBe("6");
-    expect(screen.getByRole("heading", { name: "Formulate permanent-fix options" })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Choose the permanent-fix path" })).toBeTruthy();
+    expect(screen.getByText("Baseline recommendation")).toBeTruthy();
+    expect(screen.getAllByText("Fix forward through a reviewed PR")).toHaveLength(2);
+    expect(screen.getByText("Hold the rollback and investigate")).toBeTruthy();
+    expect(screen.getByText("Prepare an emergency hotfix")).toBeTruthy();
+    expect(screen.queryByRole("heading", { name: "Formulate permanent-fix options" })).toBeNull();
 
     const propose = harness.tools.find((tool) => tool.name === "propose_remediation_options")!;
     let proposalResult: Record<string, unknown> | undefined;
@@ -589,7 +594,7 @@ describe("Incident Room acceptance", () => {
       }) as Record<string, unknown>;
     });
     expect(proposalResult?.nextAction).toMatch(/visible in this tab.*human to choose/i);
-    expect(screen.getByText("Agent options are visible; the human decides")).toBeTruthy();
+    expect(screen.getByText("Agent-refined options are visible; the human decides")).toBeTruthy();
     expect(screen.getByText("Agent recommends")).toBeTruthy();
     expect(screen.getAllByText("Fix forward through a reviewed PR")).toHaveLength(2);
     expect(screen.getByText("Hold the rollback and investigate")).toBeTruthy();
@@ -674,9 +679,10 @@ describe("Incident Room acceptance", () => {
     const incidentTrack = screen.getByRole("region", {
       name: "500 observed → rollback approved → 200 verified → repair path chosen",
     });
-    expect((within(incidentTrack).getByRole("button", {
-      name: "Agent proposal required",
-    }) as HTMLButtonElement).disabled).toBe(true);
+    expect(within(incidentTrack).getByRole("button", {
+      name: "Review three options",
+    })).toBeTruthy();
+    expect(screen.getByText("Baseline recommendation")).toBeTruthy();
     expect((screen.getByLabelText("Recovery scope") as HTMLSelectElement).disabled).toBe(true);
 
     const propose = harness.tools.find((tool) => tool.name === "propose_remediation_options")!;

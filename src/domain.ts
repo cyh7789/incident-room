@@ -102,6 +102,7 @@ export interface RemediationProposal {
   rootCauseSummary: string;
   recommendedPath: RemediationPath;
   rationale: string;
+  source: "RECOVERY_BASELINE" | "AGENT";
   state: "PROPOSED" | "SELECTED";
   selectedPath?: RemediationPath;
 }

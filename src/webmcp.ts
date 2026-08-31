@@ -51,7 +51,7 @@ interface WebMcpActions {
   ) => Promise<ChangeComparison>;
   getVerifiedRecovery: () => RecoveryResult | undefined;
   proposeRemediationOptions: (
-    proposal: Omit<RemediationProposal, "state" | "selectedPath">,
+    proposal: Omit<RemediationProposal, "source" | "state" | "selectedPath">,
   ) => RemediationProposal;
 }
 

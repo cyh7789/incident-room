@@ -258,8 +258,12 @@ function GuidedProgress({
       : state === "RECOVERED" && activeStep === 6 && remediation
         ? {
             mode: "active",
-            title: "Agent options are visible; the human decides",
-            detail: "Compare the recommendation with the two alternatives, then record one follow-up path on this page.",
+            title: remediation.source === "AGENT"
+              ? "Agent-refined options are visible; the human decides"
+              : "A repair baseline is ready; the agent can refine it",
+            detail: remediation.source === "AGENT"
+              ? "Compare the agent recommendation with the two alternatives, then record one follow-up path on this page."
+              : "Review the immediate recommendation now, or ask the agent to refine it from the verified 500 → 200 evidence.",
           }
         : state === "RECOVERED" && activeStep === 6
           ? {
@@ -885,8 +889,12 @@ export default function App() {
       }
       if (remediation.state === "PROPOSED") {
         return {
-          title: "Review the agent recommendation and choose a repair path",
-          detail: "The recommendation is advisory. A person can select either alternative before recording the decision.",
+          title: remediation.source === "AGENT"
+            ? "Review the agent recommendation and choose a repair path"
+            : "Review the repair baseline or ask the agent to refine it",
+          detail: remediation.source === "AGENT"
+            ? "The recommendation is advisory. A person can select either alternative before recording the decision."
+            : "Three usable paths are already visible. The WebMCP agent can replace the baseline diagnosis and recommendation before the human decides.",
           label: "Review three options",
           icon: <UserRound aria-hidden="true" size={17} />,
           onClick: () => document.getElementById("remediation-title")?.focus(),
@@ -1173,7 +1181,9 @@ export default function App() {
                           : activeStep === 5
                             ? "Controller returns visible proof"
                             : remediation
-                              ? "Agent options are ready for a human decision"
+                              ? remediation.source === "AGENT"
+                                ? "Agent-refined options are ready for a human decision"
+                                : "A repair baseline is ready for a human decision"
                               : "Permanent remediation still needs an agent proposal"}
                 </strong>
                 <p>
@@ -1190,7 +1200,9 @@ export default function App() {
                           : activeStep === 5
                             ? "A stale refusal and a verified rollback remain attached to this plan."
                             : remediation
-                              ? "Compare all three paths, then record one human-selected follow-up without creating external work."
+                              ? remediation.source === "AGENT"
+                                ? "Compare the agent-refined paths, then record one human-selected follow-up without creating external work."
+                                : "Choose from the three immediate paths, or let the agent refine the diagnosis before recording a follow-up."
                               : "Use the verified 500 → 200 evidence to ask the agent for repair options."}
                 </p>
               </div>
@@ -1436,19 +1448,22 @@ export default function App() {
                 <>
                   <div className="remediation-heading">
                     <div>
-                      <p className="eyebrow">Agent proposes · Human decides</p>
+                      <p className="eyebrow">
+                        {remediation.source === "AGENT" ? "Agent refines · Human decides" : "Recovery baseline · Human decides"}
+                      </p>
                       <h3 id="remediation-title" tabIndex={-1}>Choose the permanent-fix path</h3>
                       <p>{remediation.rootCauseSummary}</p>
                     </div>
                     <span className="interface-chip chip-read">
-                      <Bot aria-hidden="true" size={14} /> Agent tool · Page only
+                      <Bot aria-hidden="true" size={14} />
+                      {remediation.source === "AGENT" ? "Agent-refined · Page only" : "Ready now · Agent can refine"}
                     </span>
                   </div>
 
                   <div className="agent-recommendation" role="status">
                     <GitPullRequest aria-hidden="true" size={19} />
                     <div>
-                      <small>Agent recommends</small>
+                      <small>{remediation.source === "AGENT" ? "Agent recommends" : "Baseline recommendation"}</small>
                       <strong>{remediationOptions[remediation.recommendedPath].title}</strong>
                       <p>{remediation.rationale}</p>
                     </div>
@@ -1471,7 +1486,9 @@ export default function App() {
                           <span className="remediation-option-copy">
                             <span className="remediation-option-title">
                               <strong>{option.title}</strong>
-                              {recommended && <small>Agent recommended</small>}
+                              {recommended && (
+                                <small>{remediation.source === "AGENT" ? "Agent recommended" : "Recommended now"}</small>
+                              )}
                             </span>
                             <span>{option.summary}</span>
                           </span>
@@ -1497,7 +1514,9 @@ export default function App() {
                       <div>
                         <p className="eyebrow">Selected follow-up · simulated handoff</p>
                         <h3 id="root-fix-title">{remediationOptions[remediation.selectedPath].title}</h3>
-                        <p>The human selected this path after reviewing the agent recommendation and alternatives.</p>
+                        <p>
+                          The human selected this path after reviewing the {remediation.source === "AGENT" ? "agent recommendation" : "recovery baseline"} and alternatives.
+                        </p>
                       </div>
                       <span className="issue-draft-status">Simulated issue draft</span>
                       <article className="issue-draft">

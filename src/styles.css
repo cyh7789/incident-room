@@ -1011,7 +1011,7 @@ h2 { margin-bottom: 0; font-size: 1.08rem; line-height: 1.3; letter-spacing: -0.
 .workspace[data-active-step="3"] .guided-stage,
 .workspace[data-active-step="4"] .guided-stage,
 .workspace[data-active-step="5"] .guided-stage,
-.workspace[data-active-step="6"] .guided-stage { grid-template-columns: minmax(0, 900px); justify-content: center; }
+.workspace[data-active-step="6"] .guided-stage { grid-template-columns: minmax(0, 1fr); }
 .workspace[data-active-step="3"] .guided-stage .evidence-column,
 .workspace[data-active-step="4"] .guided-stage .evidence-column,
 .workspace[data-active-step="5"] .guided-stage .evidence-column,

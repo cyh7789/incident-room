@@ -8,10 +8,12 @@ import {
   CircleDot,
   Cloud,
   GitCompareArrows,
+  GitPullRequest,
   LockKeyhole,
   RefreshCw,
   ShieldCheck,
   UserRound,
+  Wrench,
   X,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -20,6 +22,8 @@ import type {
   IncidentSummary,
   RecoveryPlan,
   RecoveryResult,
+  RemediationPath,
+  RemediationProposal,
   ScopeMode,
   ServiceId,
 } from "./domain";
@@ -98,7 +102,7 @@ function ServiceButton({
   );
 }
 
-type GuidedStep = 1 | 2 | 3 | 4 | 5;
+type GuidedStep = 1 | 2 | 3 | 4 | 5 | 6;
 type GettingStartedTab = "use" | "install" | "connect";
 
 interface GuidedHumanAction {
@@ -171,12 +175,61 @@ const guidedSteps: Array<{
     surfaceKind: "No agent write tool",
     surfaceDetail: "The form response proves PLAN_STALE with no write, or the same request changing from 500 to 200.",
   },
+  {
+    id: 6,
+    label: "Remediate",
+    detail: "Choose root fix",
+    icon: <Wrench aria-hidden="true" size={18} />,
+    surfaceCue: "Next agent call",
+    surfaceName: "propose_remediation_options",
+    surfaceKind: "Page-only proposal · no external write",
+    surfaceDetail: "After 200 is verified, the agent compares three permanent-fix paths and leaves the final choice to the human.",
+  },
 ];
+
+const remediationOptions: Record<RemediationPath, {
+  title: string;
+  summary: string;
+  issueTitle: string;
+  steps: string[];
+}> = {
+  FIX_FORWARD_PR: {
+    title: "Fix forward through a reviewed PR",
+    summary: "Keep the healthy rollback active while engineering fixes the regressed checkout version, proves it with a regression test, and canary deploys a new version.",
+    issueTitle: "Fix checkout regression and canary a reviewed version",
+    steps: [
+      "Reproduce the fixed-cart 500 from the regressed deployment and add a failing regression test.",
+      "Patch checkout only, review the PR, and keep payment unchanged.",
+      "Canary the new checkout version, require the same request to stay 200, then complete rollout and observe.",
+    ],
+  },
+  HOLD_ROLLBACK: {
+    title: "Hold the rollback and investigate",
+    summary: "Keep the recovered version serving traffic, preserve the evidence, and delay any new deployment until the producing change is confirmed.",
+    issueTitle: "Investigate checkout regression while rollback stays active",
+    steps: [
+      "Preserve deployment IDs, the 500 → 200 proof, and the exact regressed diff in the issue.",
+      "Correlate checkout logs and configuration with the failure without changing payment.",
+      "Return with a tested fix-forward proposal before scheduling another checkout deployment.",
+    ],
+  },
+  EMERGENCY_HOTFIX: {
+    title: "Prepare an emergency hotfix",
+    summary: "Use only when a business-critical change cannot remain rolled back. Patch the smallest checkout surface and keep an immediate rollback ready.",
+    issueTitle: "Prepare guarded checkout hotfix after rollback",
+    steps: [
+      "Limit the patch to the failing fixed-cart path and add a targeted regression test.",
+      "Require human review, then canary only the checkout Worker.",
+      "Verify the same request at 200 and roll back immediately if health or payment evidence changes.",
+    ],
+  },
+};
 
 function GuidedProgress({
   activeStep,
   availableStep,
   state,
+  remediation,
   webMcpStatus,
   humanAction,
   onStepChange,
@@ -184,6 +237,7 @@ function GuidedProgress({
   activeStep: GuidedStep;
   availableStep: GuidedStep;
   state: RecoveryPlan["state"];
+  remediation: RemediationProposal | null;
   webMcpStatus: WebMcpStatus;
   humanAction: GuidedHumanAction;
   onStepChange: (step: GuidedStep) => void;
@@ -195,12 +249,30 @@ function GuidedProgress({
         title: "Stopped before rollback write",
         detail: "PLAN_STALE protected the changed deployment. Refresh the evidence, revise the same page, then submit again.",
       }
-    : state === "RECOVERED"
+    : state === "RECOVERED" && activeStep === 6 && remediation?.state === "SELECTED"
       ? {
           mode: "success",
-          title: "Recovery proved by the same checkout request",
-          detail: "The Controller wrote the rollback only after approval, then verified the fixed request changed from 500 to 200.",
+          title: "Recovery and the human-selected repair path are recorded",
+          detail: "The issue draft is simulated. No PR or deployment was created from this page.",
         }
+      : state === "RECOVERED" && activeStep === 6 && remediation
+        ? {
+            mode: "active",
+            title: "Agent options are visible; the human decides",
+            detail: "Compare the recommendation with the two alternatives, then record one follow-up path on this page.",
+          }
+        : state === "RECOVERED" && activeStep === 6
+          ? {
+              mode: "active",
+              title: "Recovery is verified; permanent remediation is still open",
+              detail: "The next agent call must formulate options from the recovered deployment evidence.",
+            }
+          : state === "RECOVERED"
+            ? {
+                mode: "success",
+                title: "Recovery proved by the same checkout request",
+                detail: "The Controller wrote the rollback only after approval, then verified the fixed request changed from 500 to 200.",
+              }
       : state === "FAILED"
         ? {
             mode: "blocked",
@@ -228,7 +300,7 @@ function GuidedProgress({
               : {
                   mode: "idle",
                   title: "Follow one causal path",
-                  detail: "Observe the live failure, diagnose the change, inspect the rollback plan, approve it, then verify the same request.",
+                  detail: "Observe the live failure, approve the guarded rollback, verify the same request, then choose a permanent-fix path.",
                 };
 
   return (
@@ -240,19 +312,19 @@ function GuidedProgress({
       <div className="guided-progress-heading">
         <div>
           <p className="eyebrow">Live incident track</p>
-          <h2 id="guided-title">500 observed → change found → rollback proposed → human approval → 200 verified</h2>
+          <h2 id="guided-title">500 observed → rollback approved → 200 verified → repair path chosen</h2>
         </div>
         <div className="guided-heading-status">
           <span className={`guided-webmcp-status webmcp-${webMcpStatus.toLowerCase()}`}>
             <CircleDot aria-hidden="true" size={12} /> WebMCP {webMcpStatus.toLowerCase()}
           </span>
-          <span className="guided-count">Step {activeStep} of 5</span>
+          <span className="guided-count">Step {activeStep} of {guidedSteps.length}</span>
         </div>
       </div>
       <ol className="guided-stepper" aria-label="Recovery rehearsal steps">
         {guidedSteps.map((step) => {
           const isCurrent = activeStep === step.id;
-          const isComplete = step.id < activeStep || state === "RECOVERED";
+          const isComplete = step.id < activeStep || (state === "RECOVERED" && step.id <= 5);
           const isAvailable = step.id <= availableStep;
           return (
             <li key={step.id} className={`${isCurrent ? "is-current" : ""} ${isComplete ? "is-complete" : ""}`}>
@@ -303,7 +375,7 @@ function GuidedProgress({
             <small>{activeSurface.surfaceKind}</small>
           </div>
           <div className="guided-surface-name">
-            {activeStep < 4 ? <Bot aria-hidden="true" size={16} /> : activeStep === 4 ? <UserRound aria-hidden="true" size={16} /> : <ShieldCheck aria-hidden="true" size={16} />}
+            {activeStep < 4 || activeStep === 6 ? <Bot aria-hidden="true" size={16} /> : activeStep === 4 ? <UserRound aria-hidden="true" size={16} /> : <ShieldCheck aria-hidden="true" size={16} />}
             <code>{activeSurface.surfaceName}</code>
           </div>
           <p>{activeSurface.surfaceDetail}</p>
@@ -460,6 +532,7 @@ export default function App() {
     selectedService,
     selectedChange,
     plan,
+    remediation,
     error,
     labResetError,
     isIncidentLoading,
@@ -469,9 +542,16 @@ export default function App() {
   const webMcpActions = useMemo(
     () => ({
       inspectCurrentIncident: actions.inspectCurrentIncident,
+      getVerifiedRecovery: actions.getVerifiedRecovery,
+      proposeRemediationOptions: actions.proposeRemediationOptions,
       showChangeComparison: actions.showChangeComparison,
     }),
-    [actions.inspectCurrentIncident, actions.showChangeComparison],
+    [
+      actions.inspectCurrentIncident,
+      actions.getVerifiedRecovery,
+      actions.proposeRemediationOptions,
+      actions.showChangeComparison,
+    ],
   );
   const webMcpStatus = useWebMcpTools(webMcpActions);
   const formRef = useRef<HTMLFormElement>(null);
@@ -481,6 +561,7 @@ export default function App() {
   const [activeStep, setActiveStep] = useState<GuidedStep>(1);
   const [isExplainerOpen, setIsExplainerOpen] = useState(false);
   const [gettingStartedTab, setGettingStartedTab] = useState<GettingStartedTab>("use");
+  const [remediationChoice, setRemediationChoice] = useState<RemediationPath | null>(null);
   const isRecoveryDisabled =
     isIncidentLoading ||
     isLabResetting ||
@@ -488,9 +569,10 @@ export default function App() {
     plan.state === "RECOVERED" ||
     incident.health.checkout !== "DEGRADED";
   const availableStep: GuidedStep =
-    plan.state === "SUBMITTING" ||
+    plan.state === "RECOVERED"
+      ? 6
+      : plan.state === "SUBMITTING" ||
     plan.state === "STALE" ||
-    plan.state === "RECOVERED" ||
     plan.state === "FAILED"
       ? 5
       : plan.state === "DRAFTED" || plan.state === "HUMAN_EDITED" || selectedChange
@@ -508,6 +590,15 @@ export default function App() {
   const agentInspectedIncident = plan.activities.some(
     (activity) => activity.id === "agent-inspected",
   );
+  useEffect(() => {
+    if (!remediation) {
+      setRemediationChoice(null);
+      return;
+    }
+    if (remediation.state === "PROPOSED") {
+      setRemediationChoice(remediation.recommendedPath);
+    }
+  }, [remediation]);
   useEffect(() => {
     if (!isExplainerOpen) return;
     const previousOverflow = document.body.style.overflow;
@@ -605,10 +696,11 @@ export default function App() {
   useEffect(() => {
     if (plan.state === "DRAFTED" || plan.state === "HUMAN_EDITED") {
       setActiveStep(4);
+    } else if (plan.state === "RECOVERED") {
+      setActiveStep(6);
     } else if (
       plan.state === "SUBMITTING" ||
       plan.state === "STALE" ||
-      plan.state === "RECOVERED" ||
       plan.state === "FAILED"
     ) {
       setActiveStep(5);
@@ -636,11 +728,19 @@ export default function App() {
       observedDeploymentId: plan.observedDeploymentId,
       reason: String(formData.get("reason") ?? ""),
     });
+    const response = request.then((result) => result.status === "RECOVERED"
+      ? {
+          ...result,
+          nextAction:
+            "Call propose_remediation_options with the regressed deployment ID, evidence-backed diagnosis, recommendation, and rationale. The human will choose on the visible page.",
+        }
+      : result);
 
     if (nativeEvent.agentInvoked && nativeEvent.respondWith) {
-      nativeEvent.respondWith(request);
+      nativeEvent.respondWith(response);
     }
     void request.catch(() => undefined);
+    void response.catch(() => undefined);
   };
 
   const openSuspectedChange = () => {
@@ -665,7 +765,17 @@ export default function App() {
   };
 
   const humanAction: GuidedHumanAction = (() => {
-    if (activeStep < 5 && ["SUBMITTING", "STALE", "RECOVERED", "FAILED"].includes(plan.state)) {
+    if (activeStep < 6 && plan.state === "RECOVERED") {
+      return {
+        title: "Checkout is back at 200; the permanent fix still needs a decision",
+        detail: "Continue to the same live page so the agent can propose repair paths from the verified evidence.",
+        label: "Continue to remediation",
+        icon: <Wrench aria-hidden="true" size={17} />,
+        onClick: () => goToStep(6),
+      };
+    }
+
+    if (activeStep < 5 && ["SUBMITTING", "STALE", "FAILED"].includes(plan.state)) {
       return {
         title: "A recovery result is already available",
         detail: "Return to the guarded Controller response without searching through the page.",
@@ -762,6 +872,36 @@ export default function App() {
       };
     }
 
+    if (activeStep === 6) {
+      if (!remediation) {
+        return {
+          title: "Agent must now formulate permanent-fix options",
+          detail: "Call propose_remediation_options from the verified 500 → 200 evidence. No issue, PR, or deployment will be created.",
+          label: "Agent proposal required",
+          icon: <Bot aria-hidden="true" size={17} />,
+          disabled: true,
+          onClick: () => undefined,
+        };
+      }
+      if (remediation.state === "PROPOSED") {
+        return {
+          title: "Review the agent recommendation and choose a repair path",
+          detail: "The recommendation is advisory. A person can select either alternative before recording the decision.",
+          label: "Review three options",
+          icon: <UserRound aria-hidden="true" size={17} />,
+          onClick: () => document.getElementById("remediation-title")?.focus(),
+        };
+      }
+      return {
+        title: "The follow-up path is recorded on this page",
+        detail: "The generated issue is a draft only. Engineering still owns the PR, review, deployment, and observation window.",
+        label: isLabResetting ? "Starting demo…" : "Replay from checkout 500",
+        icon: <RefreshCw className={isLabResetting ? "spin" : undefined} aria-hidden="true" size={17} />,
+        busy: isLabResetting,
+        onClick: startFreshRehearsal,
+      };
+    }
+
     if (plan.state === "STALE") {
       return {
         title: "The stale gate refused the rollback",
@@ -774,11 +914,10 @@ export default function App() {
     if (plan.state === "RECOVERED") {
       return {
         title: "The same checkout request now returns 200",
-        detail: "The proof is complete. Reset checkout to 500 only when you want another rehearsal.",
-        label: isLabResetting ? "Starting demo…" : "Replay from checkout 500",
-        icon: <RefreshCw className={isLabResetting ? "spin" : undefined} aria-hidden="true" size={17} />,
-        busy: isLabResetting,
-        onClick: startFreshRehearsal,
+        detail: "Emergency recovery is complete. Continue to formulate the permanent-fix choices.",
+        label: "Continue to remediation",
+        icon: <Wrench aria-hidden="true" size={17} />,
+        onClick: () => goToStep(6),
       };
     }
     if (plan.state === "SUBMITTING") {
@@ -841,7 +980,8 @@ export default function App() {
             <h1 id="product-title">One live Recovery Plan. Agent prepares it. Human decides.</h1>
             <p className="product-summary">
               Incident Room uses WebMCP so a person and an agent can inspect the same failure,
-              edit the same page object, and verify the same checkout request after a guarded rollback.
+              edit the same page object, verify the same checkout request after a guarded rollback,
+              and choose among agent-proposed permanent fixes.
             </p>
             <div className="product-actions">
               <button
@@ -865,8 +1005,10 @@ export default function App() {
               <span><small>02</small><strong>PLAN_STALE if superseded · no write</strong></span>
               <ArrowRight aria-hidden="true" size={15} />
               <span><small>03</small><strong>200 verified</strong></span>
+              <ArrowRight aria-hidden="true" size={15} />
+              <span><small>04</small><strong>Human chooses permanent fix</strong></span>
             </div>
-            <p>The base path proves 500 → 200. A superseded plan proves <code>PLAN_STALE</code> with no write.</p>
+            <p>The base path proves 500 → 200, then the agent proposes repair options for a human decision. A superseded plan proves <code>PLAN_STALE</code> with no write.</p>
           </aside>
         </section>
 
@@ -874,6 +1016,7 @@ export default function App() {
           activeStep={activeStep}
           availableStep={availableStep}
           state={plan.state}
+          remediation={remediation}
           webMcpStatus={webMcpStatus}
           humanAction={humanAction}
           onStepChange={goToStep}
@@ -1027,7 +1170,11 @@ export default function App() {
                           : "Rollback operation ready for inspection"
                         : activeStep === 4
                           ? "Human approves the exact operation"
-                          : "Controller returns visible proof"}
+                          : activeStep === 5
+                            ? "Controller returns visible proof"
+                            : remediation
+                              ? "Agent options are ready for a human decision"
+                              : "Permanent remediation still needs an agent proposal"}
                 </strong>
                 <p>
                   {activeStep <= 2 && hasPreparedPlan
@@ -1040,7 +1187,11 @@ export default function App() {
                         ? "Inspect the stale precheck, checkout deployment write, and same-request verification before approval."
                         : activeStep === 4
                           ? "Edit scopeMode, review the exact rollback, and personally Submit the final page state."
-                          : "A stale refusal and a verified rollback remain attached to this plan."}
+                          : activeStep === 5
+                            ? "A stale refusal and a verified rollback remain attached to this plan."
+                            : remediation
+                              ? "Compare all three paths, then record one human-selected follow-up without creating external work."
+                              : "Use the verified 500 → 200 evidence to ask the agent for repair options."}
                 </p>
               </div>
             </div>
@@ -1215,34 +1366,14 @@ export default function App() {
                     </div>
                   </div>
                   {plan.result.status === "RECOVERED" && (
-                    <>
-                      <section className="root-fix-handoff" aria-labelledby="root-fix-title">
-                        <div>
-                          <p className="eyebrow">Permanent fix handoff</p>
-                          <h3 id="root-fix-title">Recovery is complete. The root fix is not.</h3>
-                          <p>The rollback restored service. The simulated issue below hands the evidence to engineering, which then decides whether to keep the rollback or ship a tested fix-forward PR and redeploy.</p>
-                        </div>
-                        <span className="issue-draft-status">Simulated issue draft</span>
-                        <article className="issue-draft">
-                          <small>Title</small>
-                          <strong>[{incident.incidentId}] Fix checkout regression after rollback</strong>
-                          <p>Regressed deployment <code>{plan.result.currentDeploymentId}</code>. Add a fixed-cart regression test, keep payment unchanged, and ship a reviewed fix-forward checkout version.</p>
-                        </article>
-                        <ol>
-                          <li><span>1</span>Issue captures the regressed deployment and 500 → 200 proof.</li>
-                          <li><span>2</span>PR adds the permanent fix and regression test.</li>
-                          <li><span>3</span>A human reviews before a new checkout version is deployed.</li>
-                        </ol>
-                      </section>
-                      <button
-                        type="button"
-                        className="text-button replay-button"
-                        onClick={startFreshRehearsal}
-                        disabled={isLabResetting}
-                      >
-                        <RefreshCw aria-hidden="true" size={15} /> Start another clean rehearsal
-                      </button>
-                    </>
+                    <button
+                      type="button"
+                      className="primary-button remediation-next-button"
+                      onClick={() => goToStep(6)}
+                    >
+                      <Wrench aria-hidden="true" size={17} /> Continue to permanent remediation
+                      <ArrowRight aria-hidden="true" size={17} />
+                    </button>
                   )}
                 </div>
               ) : (
@@ -1277,6 +1408,114 @@ export default function App() {
                 </p>
               )}
             </div>
+
+            <section className="remediation-workspace step-6-only" aria-labelledby="remediation-title">
+              <div className="remediation-proof">
+                <CheckCircle2 aria-hidden="true" size={20} />
+                <div>
+                  <p className="eyebrow">Verified recovery boundary</p>
+                  <strong>Checkout is back at 200. The rollback stays active while the permanent fix is decided.</strong>
+                  <p>
+                    Regressed deployment <code>{plan.result?.currentDeploymentId ?? "Unavailable"}</code> remains attached to this decision. Payment stays unchanged.
+                  </p>
+                </div>
+              </div>
+
+              {!remediation ? (
+                <div className="remediation-awaiting" role="status">
+                  <Bot aria-hidden="true" size={22} />
+                  <div>
+                    <p className="eyebrow">Next agent call</p>
+                    <h3 id="remediation-title" tabIndex={-1}>Formulate permanent-fix options</h3>
+                    <p>
+                      Call <code>propose_remediation_options</code> with the regressed deployment, diagnosis, recommended path, and rationale. The result will appear here for a human choice.
+                    </p>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <div className="remediation-heading">
+                    <div>
+                      <p className="eyebrow">Agent proposes · Human decides</p>
+                      <h3 id="remediation-title" tabIndex={-1}>Choose the permanent-fix path</h3>
+                      <p>{remediation.rootCauseSummary}</p>
+                    </div>
+                    <span className="interface-chip chip-read">
+                      <Bot aria-hidden="true" size={14} /> Agent tool · Page only
+                    </span>
+                  </div>
+
+                  <div className="agent-recommendation" role="status">
+                    <GitPullRequest aria-hidden="true" size={19} />
+                    <div>
+                      <small>Agent recommends</small>
+                      <strong>{remediationOptions[remediation.recommendedPath].title}</strong>
+                      <p>{remediation.rationale}</p>
+                    </div>
+                  </div>
+
+                  <div className="remediation-options" role="radiogroup" aria-label="Permanent-fix options">
+                    {(Object.keys(remediationOptions) as RemediationPath[]).map((path) => {
+                      const option = remediationOptions[path];
+                      const recommended = path === remediation.recommendedPath;
+                      return (
+                        <label key={path} className={`remediation-option ${remediationChoice === path ? "is-selected" : ""}`}>
+                          <input
+                            type="radio"
+                            name="remediationPath"
+                            value={path}
+                            checked={remediationChoice === path}
+                            onChange={() => setRemediationChoice(path)}
+                            disabled={remediation.state === "SELECTED"}
+                          />
+                          <span className="remediation-option-copy">
+                            <span className="remediation-option-title">
+                              <strong>{option.title}</strong>
+                              {recommended && <small>Agent recommended</small>}
+                            </span>
+                            <span>{option.summary}</span>
+                          </span>
+                        </label>
+                      );
+                    })}
+                  </div>
+
+                  {remediation.state === "PROPOSED" ? (
+                    <div className="remediation-decision">
+                      <p><strong>No external write.</strong> This records a page decision only. It does not create an issue, PR, or deployment.</p>
+                      <button
+                        type="button"
+                        className="primary-button"
+                        disabled={!remediationChoice}
+                        onClick={() => remediationChoice && actions.selectRemediationPath(remediationChoice)}
+                      >
+                        <UserRound aria-hidden="true" size={17} /> Human choice · Record follow-up path
+                      </button>
+                    </div>
+                  ) : remediation.selectedPath ? (
+                    <section className="root-fix-handoff" aria-labelledby="root-fix-title">
+                      <div>
+                        <p className="eyebrow">Selected follow-up · simulated handoff</p>
+                        <h3 id="root-fix-title">{remediationOptions[remediation.selectedPath].title}</h3>
+                        <p>The human selected this path after reviewing the agent recommendation and alternatives.</p>
+                      </div>
+                      <span className="issue-draft-status">Simulated issue draft</span>
+                      <article className="issue-draft">
+                        <small>Title</small>
+                        <strong>[{incident.incidentId}] {remediationOptions[remediation.selectedPath].issueTitle}</strong>
+                        <p>Regressed deployment <code>{remediation.regressedDeploymentId}</code>. Keep the verified rollback active and payment unchanged until the selected acceptance path is complete.</p>
+                      </article>
+                      <ol>
+                        {remediationOptions[remediation.selectedPath].steps.map((step, index) => (
+                          <li key={step}><span>{index + 1}</span>{step}</li>
+                        ))}
+                      </ol>
+                      <p className="simulation-boundary">No GitHub issue, PR, or checkout deployment was created. These are the recorded next actions for engineering.</p>
+                    </section>
+                  ) : null}
+                </>
+              )}
+            </section>
           </section>
         </div>
       </main>
@@ -1373,18 +1612,18 @@ export default function App() {
                 </div>
                 <ol className="onboarding-steps" aria-label="100-second recovery walkthrough">
                   <li><span>1</span><div><strong>Start with a verified 500</strong><p>Press <b>Start 100-second demo</b>. The lab proves checkout is degraded while payment remains healthy.</p></div></li>
-                  <li><span>2</span><div><strong>Ask the agent</strong><p>In ChatGPT’s in-app browser or WebMCP-enabled Chrome, ask: “Inspect the current incident, compare the suspected deployment change, then prepare a Recovery Plan for me to review.” The two read tools update this page.</p></div></li>
-                  <li><span>3</span><div><strong>Inspect, approve, then hand off</strong><p>Review the checkout rollback operation, change Recovery scope to Checkout only, and personally press Submit. After 200 is verified, a simulated issue captures the permanent fix.</p></div></li>
+                  <li><span>2</span><div><strong>Ask the agent</strong><p>In ChatGPT’s in-app browser or WebMCP-enabled Chrome, ask: “Inspect the current incident, compare the suspected deployment change, then prepare a Recovery Plan for me to review.” The read tools update this page.</p></div></li>
+                  <li><span>3</span><div><strong>Approve recovery, then choose the root fix</strong><p>Review the rollback, change Recovery scope to Checkout only, and personally press Submit. After 200 is verified, the agent proposes three permanent-fix paths and a person chooses one.</p></div></li>
                 </ol>
                 <div className="proof-result">
                   <ShieldCheck aria-hidden="true" size={18} />
-                  <p><strong>Expected proof</strong><span>Base: 500 → approved checkout rollback → 200 → simulated root-fix issue. If the deployment changes first: PLAN_STALE → no write.</span></p>
+                  <p><strong>Expected proof</strong><span>Base: 500 → approved checkout rollback → 200 → agent repair options → human-selected simulated issue. If the deployment changes first: PLAN_STALE → no write.</span></p>
                 </div>
                 <div className="browser-compatibility">
                   <Bot aria-hidden="true" size={19} />
                   <div>
                     <strong>Browser compatibility</strong>
-                    <p>ChatGPT Site tools currently lists the two imperative tools. Chrome WebMCP also discovers the declarative form. In ChatGPT, the agent can fill the visible form through regular browser interaction; the human still submits it.</p>
+                    <p>ChatGPT Site tools lists three imperative tools. Chrome WebMCP also discovers the declarative Recovery Plan form. The recovery form and permanent-fix choice both keep the final decision with the human.</p>
                   </div>
                 </div>
               </div>

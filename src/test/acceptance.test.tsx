@@ -141,7 +141,7 @@ describe("Incident Room acceptance", () => {
     await waitFor(() => expect(screen.getByText("Ready · checkout 500")).toBeTruthy());
 
     const incidentTrack = screen.getByRole("region", {
-      name: "500 observed → change found → rollback proposed → human approval → 200 verified",
+      name: "500 observed → rollback approved → 200 verified → repair path chosen",
     });
     const humanAction = within(incidentTrack).getByLabelText("Human next action");
     const startButton = within(humanAction).getByRole("button", { name: "Start 100-second demo" });
@@ -160,7 +160,7 @@ describe("Incident Room acceptance", () => {
     expect(startButton.hasAttribute("aria-disabled")).toBe(false);
     expect(screen.getAllByText("fresh-deployment-id").length).toBeGreaterThanOrEqual(1);
     expect(screen.getByText(/checkout returned 500; payment remained healthy/i)).toBeTruthy();
-    expect(harness.tools).toHaveLength(2);
+    expect(harness.tools).toHaveLength(3);
     expect(fetchMock).toHaveBeenCalledWith("/api/lab/reset", {
       method: "POST",
       headers: { "X-Incident-Room-Action": "start-rehearsal" },
@@ -174,12 +174,14 @@ describe("Incident Room acceptance", () => {
     const harness = modelContextHarness();
     const view = renderApp();
 
-    await waitFor(() => expect(harness.tools).toHaveLength(2));
+    await waitFor(() => expect(harness.tools).toHaveLength(3));
     expect(harness.tools.map((tool) => tool.name)).toEqual([
       "inspect_current_incident",
       "show_change_comparison",
+      "propose_remediation_options",
     ]);
     expect(harness.tools.map((tool) => tool.annotations)).toEqual([
+      { readOnlyHint: true, untrustedContentHint: true },
       { readOnlyHint: true, untrustedContentHint: true },
       { readOnlyHint: true, untrustedContentHint: true },
     ]);
@@ -217,7 +219,7 @@ describe("Incident Room acceptance", () => {
     expect(screen.getByText("PLAN_STALE if superseded · no write")).toBeTruthy();
     expect(screen.getByText("200 verified")).toBeTruthy();
     const incidentTrack = screen.getByRole("region", {
-      name: "500 observed → change found → rollback proposed → human approval → 200 verified",
+      name: "500 observed → rollback approved → 200 verified → repair path chosen",
     });
     expect(incidentTrack.getAttribute("id")).toBe("live-incident-track");
     expect(within(incidentTrack).getAllByText("inspect_current_incident").length).toBeGreaterThanOrEqual(1);
@@ -241,10 +243,10 @@ describe("Incident Room acceptance", () => {
     expect(within(dialog).getByRole("list", { name: "100-second recovery walkthrough" }).children).toHaveLength(3);
     expect(within(dialog).getByText(/start 100-second demo/i)).toBeTruthy();
     expect(within(dialog).getByText(/then prepare a recovery plan for me to review/i)).toBeTruthy();
-    expect(within(dialog).getByText(/review the checkout rollback operation.*change Recovery scope to Checkout only/i)).toBeTruthy();
-    expect(within(dialog).getByText(/Base: 500.*rollback.*200.*simulated root-fix issue.*PLAN_STALE.*no write/i)).toBeTruthy();
-    expect(within(dialog).getByText(/ChatGPT Site tools currently lists the two imperative tools/i)).toBeTruthy();
-    expect(within(dialog).getByText(/Chrome WebMCP also discovers the declarative form/i)).toBeTruthy();
+    expect(within(dialog).getByText(/review the rollback.*change Recovery scope to Checkout only.*agent proposes three permanent-fix paths/i)).toBeTruthy();
+    expect(within(dialog).getByText(/Base: 500.*rollback.*200.*agent repair options.*human-selected simulated issue.*PLAN_STALE.*no write/i)).toBeTruthy();
+    expect(within(dialog).getByText(/ChatGPT Site tools lists three imperative tools/i)).toBeTruthy();
+    expect(within(dialog).getByText(/Chrome WebMCP also discovers the declarative Recovery Plan form/i)).toBeTruthy();
 
     liveTab.focus();
     fireEvent.keyDown(liveTab, { key: "ArrowRight" });
@@ -297,7 +299,7 @@ describe("Incident Room acceptance", () => {
     vi.stubGlobal("fetch", fetchMock);
     renderApp();
 
-    await waitFor(() => expect(harness.tools).toHaveLength(2));
+    await waitFor(() => expect(harness.tools).toHaveLength(3));
     const inspect = harness.tools.find((tool) => tool.name === "inspect_current_incident")!;
     let inspectResult: Record<string, unknown> | undefined;
     await act(async () => {
@@ -355,14 +357,14 @@ describe("Incident Room acceptance", () => {
 
     const main = screen.getByRole("main");
     const incidentTrack = screen.getByRole("region", {
-      name: "500 observed → change found → rollback proposed → human approval → 200 verified",
+      name: "500 observed → rollback approved → 200 verified → repair path chosen",
     });
     const humanAction = within(incidentTrack).getByLabelText("Human next action");
     const form = view.container.querySelector(
       'form[toolname="prepare_recovery_rehearsal"]',
     ) as HTMLFormElement;
     expect(screen.getByRole("heading", {
-      name: "500 observed → change found → rollback proposed → human approval → 200 verified",
+      name: "500 observed → rollback approved → 200 verified → repair path chosen",
     })).toBeTruthy();
     expect(screen.getByRole("heading", { name: "Recovery Plan" })).toBeTruthy();
     expect(screen.getByText("Recovery Plan not drafted yet")).toBeTruthy();
@@ -435,8 +437,10 @@ describe("Incident Room acceptance", () => {
       return jsonResponse(stale);
     });
     vi.stubGlobal("fetch", fetchMock);
+    const harness = modelContextHarness();
     const view = renderApp();
     await waitFor(() => expect(screen.getByText("Cloudflare lab")).toBeTruthy());
+    await waitFor(() => expect(harness.tools).toHaveLength(3));
     const form = view.container.querySelector(
       'form[toolname="prepare_recovery_rehearsal"]',
     ) as HTMLFormElement;
@@ -477,8 +481,10 @@ describe("Incident Room acceptance", () => {
       return jsonResponse({ message: "Controller unavailable. Try again." }, 500);
     });
     vi.stubGlobal("fetch", fetchMock);
+    const harness = modelContextHarness();
     const view = renderApp();
     await waitFor(() => expect(screen.getByText("Cloudflare lab")).toBeTruthy());
+    await waitFor(() => expect(harness.tools).toHaveLength(3));
 
     const form = view.container.querySelector(
       'form[toolname="prepare_recovery_rehearsal"]',
@@ -525,8 +531,10 @@ describe("Incident Room acceptance", () => {
       return jsonResponse(submissions === 1 ? stale : recovered);
     });
     vi.stubGlobal("fetch", fetchMock);
+    const harness = modelContextHarness();
     const view = renderApp();
     await waitFor(() => expect(screen.getByText("Cloudflare lab")).toBeTruthy());
+    await waitFor(() => expect(harness.tools).toHaveLength(3));
 
     fireEvent.change(screen.getByLabelText("Recovery scope"), {
       target: { value: "checkout" },
@@ -544,7 +552,7 @@ describe("Incident Room acceptance", () => {
     expect(screen.getAllByText("PLAN_STALE").length).toBeGreaterThanOrEqual(1);
 
     const incidentTrack = screen.getByRole("region", {
-      name: "500 observed → change found → rollback proposed → human approval → 200 verified",
+      name: "500 observed → rollback approved → 200 verified → repair path chosen",
     });
     fireEvent.click(within(incidentTrack).getByRole("button", {
       name: "Refresh and revise plan",
@@ -565,15 +573,35 @@ describe("Incident Room acceptance", () => {
     expect(screen.getByText("Recovery verified")).toBeTruthy();
     expect(screen.getByText(/changed from 500 to 200; deployment rollback-deployment-id/i)).toBeTruthy();
     expect(screen.getAllByText("PLAN_STALE").length).toBeGreaterThanOrEqual(1);
-    expect(screen.getByText("Recovery proved by the same checkout request")).toBeTruthy();
+    expect(screen.getByText("Recovery is verified; permanent remediation is still open")).toBeTruthy();
     expect(screen.getByText("Recovered · restart to replay")).toBeTruthy();
-    expect(screen.getByRole("heading", {
-      name: "Recovery is complete. The root fix is not.",
-    })).toBeTruthy();
+    expect(screen.getByRole("main").getAttribute("data-active-step")).toBe("6");
+    expect(screen.getByRole("heading", { name: "Formulate permanent-fix options" })).toBeTruthy();
+
+    const propose = harness.tools.find((tool) => tool.name === "propose_remediation_options")!;
+    let proposalResult: Record<string, unknown> | undefined;
+    await act(async () => {
+      proposalResult = await propose.execute({
+        regressedDeploymentId: "concurrent-version-id",
+        rootCauseSummary: "The checkout deployment changed the fixed cart response from 200 to 500.",
+        recommendedPath: "FIX_FORWARD_PR",
+        rationale: "Service is stable on the rollback, so a reviewed fix-forward with a regression test is safer than a hotfix.",
+      }) as Record<string, unknown>;
+    });
+    expect(proposalResult?.nextAction).toMatch(/visible in this tab.*human to choose/i);
+    expect(screen.getByText("Agent options are visible; the human decides")).toBeTruthy();
+    expect(screen.getByText("Agent recommends")).toBeTruthy();
+    expect(screen.getAllByText("Fix forward through a reviewed PR")).toHaveLength(2);
+    expect(screen.getByText("Hold the rollback and investigate")).toBeTruthy();
+    expect(screen.getByText("Prepare an emergency hotfix")).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("radio", { name: /Hold the rollback and investigate/i }));
+    fireEvent.click(screen.getByRole("button", { name: /record follow-up path/i }));
     expect(screen.getByText("Simulated issue draft")).toBeTruthy();
     const issueDraft = screen.getByText("Title").closest("article");
     expect(issueDraft?.textContent).toContain("Regressed deployment concurrent-version-id");
-    expect(screen.getByText(/PR adds the permanent fix and regression test/i)).toBeTruthy();
+    expect(issueDraft?.textContent).toContain("Investigate checkout regression while rollback stays active");
+    expect(screen.getByText("Human selected the follow-up path")).toBeTruthy();
     expect(screen.queryByRole("link", { name: /root-fix issue/i })).toBeNull();
     expect(within(incidentTrack).getByRole("button", {
       name: "Replay from checkout 500",
@@ -586,7 +614,7 @@ describe("Incident Room acceptance", () => {
     expect(incidentReads).toBe(3);
   });
 
-  test("keeps a fresh rehearsal entry point after an agent inspects recovered health", async () => {
+  test("routes a recovered incident into agent remediation before a fresh rehearsal", async () => {
     const recovered: RecoveryResult = {
       status: "RECOVERED",
       currentDeploymentId: "broken-version-id",
@@ -621,7 +649,7 @@ describe("Incident Room acceptance", () => {
     vi.stubGlobal("fetch", fetchMock);
     const harness = modelContextHarness();
     const view = renderApp();
-    await waitFor(() => expect(harness.tools).toHaveLength(2));
+    await waitFor(() => expect(harness.tools).toHaveLength(3));
 
     const form = view.container.querySelector(
       'form[toolname="prepare_recovery_rehearsal"]',
@@ -637,20 +665,36 @@ describe("Incident Room acceptance", () => {
       }) as Record<string, unknown>;
     });
     expect(recoveredInspectResult?.recoveryReady).toBe(false);
+    expect(recoveredInspectResult?.recoveryVerified).toBe(true);
+    expect(recoveredInspectResult?.regressedDeploymentId).toBe("broken-version-id");
     expect(recoveredInspectResult?.nextAction).toBe(
-      "Stop. Ask the human to press Start 100-second demo in this page, then inspect the incident again.",
+      "Recovery is already verified at 200. Call propose_remediation_options with the regressed deployment ID, diagnosis, recommendation, and rationale.",
     );
 
     const incidentTrack = screen.getByRole("region", {
-      name: "500 observed → change found → rollback proposed → human approval → 200 verified",
+      name: "500 observed → rollback approved → 200 verified → repair path chosen",
     });
-    expect(within(incidentTrack).getByRole("button", {
-      name: "Restart from checkout 500",
-    })).toBeTruthy();
+    expect((within(incidentTrack).getByRole("button", {
+      name: "Agent proposal required",
+    }) as HTMLButtonElement).disabled).toBe(true);
     expect((screen.getByLabelText("Recovery scope") as HTMLSelectElement).disabled).toBe(true);
 
+    const propose = harness.tools.find((tool) => tool.name === "propose_remediation_options")!;
+    await act(async () => {
+      await propose.execute({
+        regressedDeploymentId: "broken-version-id",
+        rootCauseSummary: "The fixed checkout response regressed from 200 to 500.",
+        recommendedPath: "FIX_FORWARD_PR",
+        rationale: "Keep the verified rollback while a tested replacement is reviewed.",
+      });
+    });
+    fireEvent.click(screen.getByRole("button", { name: /record follow-up path/i }));
+    expect(within(incidentTrack).getByRole("button", {
+      name: "Replay from checkout 500",
+    })).toBeTruthy();
+
     fireEvent.click(within(incidentTrack).getByRole("button", {
-      name: "Restart from checkout 500",
+      name: "Replay from checkout 500",
     }));
     await waitFor(() => expect(screen.getByText("Fresh rehearsal verified")).toBeTruthy());
     expect(resetRequested).toBe(true);
@@ -677,7 +721,7 @@ describe("Incident Room acceptance", () => {
   test("webmcp/tool-lifecycle-cleanup", async () => {
     const harness = modelContextHarness();
     const view = renderApp();
-    await waitFor(() => expect(harness.signals).toHaveLength(2));
+    await waitFor(() => expect(harness.signals).toHaveLength(3));
     expect(harness.signals.every((signal) => !signal.aborted)).toBe(true);
 
     view.unmount();

@@ -15,6 +15,8 @@ import {
   type RecoveryPlan,
   type RecoveryResult,
   type RecoverySubmission,
+  type RemediationPath,
+  type RemediationProposal,
   type ServiceId,
 } from "./domain";
 
@@ -53,10 +55,16 @@ export function useIncidentRoom() {
   const [selectedService, setSelectedService] = useState<ServiceId>("checkout");
   const [selectedChange, setSelectedChange] = useState<ChangeComparison | null>(null);
   const [plan, setPlan] = useState<RecoveryPlan>(() => createInitialPlan());
+  const planRef = useRef(plan);
+  const [remediation, setRemediation] = useState<RemediationProposal | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [labResetError, setLabResetError] = useState<string | null>(null);
   const [isIncidentLoading, setIsIncidentLoading] = useState(true);
   const [isLabResetting, setIsLabResetting] = useState(false);
+
+  useEffect(() => {
+    planRef.current = plan;
+  }, [plan]);
 
   useEffect(() => {
     let active = true;
@@ -84,18 +92,26 @@ export function useIncidentRoom() {
     incidentRef.current = nextIncident;
     setIncident(nextIncident);
     setSelectedService("checkout");
-    setPlan((current) => ({
-      ...current,
-      observedDeploymentId: nextIncident.activeDeployments.checkout,
-      state: "EVIDENCE_READY",
-      result: undefined,
-      activities: upsertActivity(current.activities, {
+    setPlan((current) => {
+      const preserveVerifiedRecovery =
+        current.state === "RECOVERED" && nextIncident.health.checkout === "HEALTHY";
+      const nextPlan: RecoveryPlan = {
+        ...current,
+        observedDeploymentId: preserveVerifiedRecovery
+          ? current.observedDeploymentId
+          : nextIncident.activeDeployments.checkout,
+        state: preserveVerifiedRecovery ? "RECOVERED" : "EVIDENCE_READY",
+        result: preserveVerifiedRecovery ? current.result : undefined,
+        activities: upsertActivity(current.activities, {
         id: `${source.toLowerCase()}-inspected`,
         actor: source,
         title: `${source === "AGENT" ? "Agent" : "Human"} refreshed incident evidence`,
         detail: `Checkout is ${nextIncident.health.checkout.toLowerCase()} while payment is ${nextIncident.health.payment.toLowerCase()}.`,
-      }),
-    }));
+        }),
+      };
+      planRef.current = nextPlan;
+      return nextPlan;
+    });
     return nextIncident;
   }, []);
 
@@ -181,6 +197,7 @@ export function useIncidentRoom() {
       setIncident(nextIncident);
       setSelectedService("checkout");
       setSelectedChange(null);
+      setRemediation(null);
       setPlan({
         ...createInitialPlan(nextIncident.activeDeployments.checkout),
         state: "EVIDENCE_READY",
@@ -206,6 +223,7 @@ export function useIncidentRoom() {
   const submitRecoveryRehearsal = useCallback(
     async (submission: RecoverySubmission): Promise<RecoveryResult> => {
       setError(null);
+      setRemediation(null);
       setPlan((current) => ({
         ...current,
         state: "SUBMITTING",
@@ -219,11 +237,12 @@ export function useIncidentRoom() {
       }));
       try {
         const result = await submitRecovery(submission);
-        setPlan((current) => ({
-          ...current,
-          state: planStateForResult(result.status),
-          result,
-          activities: upsertActivity(current.activities, {
+        setPlan((current) => {
+          const nextPlan: RecoveryPlan = {
+            ...current,
+            state: planStateForResult(result.status),
+            result,
+            activities: upsertActivity(current.activities, {
             id: `${result.status.toLowerCase()}-${result.executionDeploymentId ?? result.currentDeploymentId}`,
             actor: "SYSTEM",
             title: result.status === "RECOVERED" ? "Recovery verified" : result.status,
@@ -231,8 +250,11 @@ export function useIncidentRoom() {
               result.status === "RECOVERED"
                 ? `The fixed checkout request changed from ${result.healthBefore} to ${result.healthAfter}; deployment ${result.executionDeploymentId}.`
                 : result.message,
-          }),
-        }));
+            }),
+          };
+          planRef.current = nextPlan;
+          return nextPlan;
+        });
         if (result.status === "RECOVERED") {
           try {
             const nextIncident = await fetchCurrentIncident();
@@ -253,6 +275,55 @@ export function useIncidentRoom() {
     [],
   );
 
+  const proposeRemediationOptions = useCallback((proposal: Omit<RemediationProposal, "state" | "selectedPath">) => {
+    const currentPlan = planRef.current;
+    if (currentPlan.state !== "RECOVERED" || currentPlan.result?.status !== "RECOVERED") {
+      throw new Error("Recovery must be verified before remediation options can be proposed.");
+    }
+    if (proposal.regressedDeploymentId !== currentPlan.result.currentDeploymentId) {
+      throw new Error("The remediation proposal does not match the verified regressed deployment.");
+    }
+
+    const nextProposal: RemediationProposal = {
+      ...proposal,
+      state: "PROPOSED",
+    };
+    setRemediation(nextProposal);
+    setPlan((current) => ({
+      ...current,
+      activities: upsertActivity(current.activities, {
+        id: `agent-proposed-remediation-${proposal.regressedDeploymentId}`,
+        actor: "AGENT",
+        title: "Agent proposed permanent-fix options",
+        detail: `Recommended ${proposal.recommendedPath.toLowerCase().replaceAll("_", " ")}; no issue, PR, or deployment was created.`,
+      }),
+    }));
+    return nextProposal;
+  }, []);
+
+  const getVerifiedRecovery = useCallback(() => {
+    const currentPlan = planRef.current;
+    return currentPlan.state === "RECOVERED" && currentPlan.result?.status === "RECOVERED"
+      ? currentPlan.result
+      : undefined;
+  }, []);
+
+  const selectRemediationPath = useCallback((selectedPath: RemediationPath) => {
+    setRemediation((current) => {
+      if (!current) return current;
+      return { ...current, selectedPath, state: "SELECTED" };
+    });
+    setPlan((current) => ({
+      ...current,
+      activities: upsertActivity(current.activities, {
+        id: "human-selected-remediation",
+        actor: "HUMAN",
+        title: "Human selected the follow-up path",
+        detail: `${selectedPath.toLowerCase().replaceAll("_", " ")} was recorded on this page only.`,
+      }),
+    }));
+  }, []);
+
   const actions = useMemo(
     () => ({
       inspectCurrentIncident,
@@ -261,6 +332,9 @@ export function useIncidentRoom() {
       updateRecoveryDraft,
       markDraftedByAgent,
       markDraftCancelledByAgent,
+      getVerifiedRecovery,
+      proposeRemediationOptions,
+      selectRemediationPath,
       startFreshRehearsal,
       submitRecoveryRehearsal,
     }),
@@ -268,7 +342,10 @@ export function useIncidentRoom() {
       inspectCurrentIncident,
       markDraftCancelledByAgent,
       markDraftedByAgent,
+      getVerifiedRecovery,
+      proposeRemediationOptions,
       selectService,
+      selectRemediationPath,
       showChangeComparison,
       startFreshRehearsal,
       submitRecoveryRehearsal,
@@ -281,6 +358,7 @@ export function useIncidentRoom() {
     selectedService,
     selectedChange,
     plan,
+    remediation,
     error,
     labResetError,
     isIncidentLoading,

@@ -6,14 +6,15 @@ Incident Room is a WebMCP-powered recovery rehearsal for a dedicated Cloudflare 
 
 1. Open [incident-room.fongse.workers.dev](https://incident-room.fongse.workers.dev/) in ChatGPT's in-app browser or a WebMCP-capable Chrome browser.
 2. Press **Start 100-second demo**. Wait until the Controller proves checkout returns 500 while payment remains healthy.
-3. Ask the agent: **Inspect the current incident, compare the suspected deployment change, then prepare a Recovery Plan for me to review.** The agent calls two read tools, then fills the visible Recovery Plan.
+3. Ask the agent: **Inspect the current incident, compare the suspected deployment change, then prepare a Recovery Plan for me to review.** The agent calls the incident and comparison tools, then fills the visible Recovery Plan.
 4. Inspect the proposed operation: stale precheck, checkout-only deployment of `checkout-healthy`, no payment write, then the same fixed request must change from 500 to 200.
 5. Change **Recovery scope** to **Checkout only**, edit the reason if needed, then personally press **Submit**.
-6. If the Controller returns `PLAN_STALE`, refresh the evidence, revise the plan, and submit again. Recovery succeeds only when the same fixed checkout request changes from 500 to 200. After recovery, the page shows a simulated root-fix issue and the PR/redeploy decision without claiming either was executed.
+6. If the Controller returns `PLAN_STALE`, refresh the evidence, revise the plan, and submit again. Recovery succeeds only when the same fixed checkout request changes from 500 to 200.
+7. After 200 is verified, the agent calls `propose_remediation_options` with its diagnosis, recommendation, and rationale. Compare fix-forward PR, hold-rollback, and emergency-hotfix paths, then record one human choice. Only then does the page produce the matching simulated issue and acceptance steps.
 
 The public site uses one shared dedicated lab, so a later rehearsal can make an older Recovery Plan stale by design.
 
-ChatGPT's built-in browser currently lists the two imperative tools as Site tools. Chrome WebMCP also discovers the declarative Recovery Plan form. In ChatGPT, the agent can fill that visible form through regular browser interaction; in both browsers, the operator personally submits it.
+ChatGPT's built-in browser lists the three imperative tools as Site tools. Chrome WebMCP also discovers the declarative Recovery Plan form. In ChatGPT, the agent can fill that visible form through regular browser interaction; in both browsers, the operator personally submits recovery and personally chooses the permanent-fix path.
 
 ## Run locally
 
@@ -41,7 +42,7 @@ npm run check
 npm run check:lab
 ```
 
-The required path covers WebMCP discovery, shared visible state, human-only lab reset, declarative manual submit, lifecycle cleanup, server allowlists, stale rejection without rollback, and the real broken-to-recovered flow.
+The required path covers WebMCP discovery, shared visible state, human-only lab reset, declarative manual submit, lifecycle cleanup, server allowlists, stale rejection without rollback, the real broken-to-recovered flow, and an agent-proposed remediation decision after recovery.
 
 ## Connect your own Cloudflare Workers
 
@@ -112,7 +113,7 @@ This contract proves the integration boundary without introducing a generic conn
 
 The 100-second path performs the emergency treatment that is safe to demonstrate: an allowlisted checkout rollback followed by same-request verification. A code fix is a separate engineering decision after service recovery.
 
-After a verified rollback, the page displays a simulated issue draft containing the regressed deployment, the 500 → 200 proof, the payment exclusion, and acceptance criteria. It does not call GitHub or claim that an issue or PR exists. The team can then keep the rollback active or create a tested fix-forward PR and deploy a new checkout version through its normal review process.
+After a verified rollback, `propose_remediation_options` places three paths on the live page and marks the agent's recommendation: fix forward through a reviewed PR, hold the rollback while investigating, or prepare an emergency hotfix. A person can choose any path. The page then displays a matching simulated issue draft containing the regressed deployment, the 500 → 200 proof, the payment exclusion, and acceptance steps. It does not call GitHub or claim that an issue, PR, or deployment exists.
 
 ## Prepare the included rehearsal Workers
 
@@ -129,9 +130,9 @@ Deploy `checkout-broken` and `payment-healthy` at 100%, then record both public 
 
 ## Current boundary
 
-- WebMCP exposes two imperative tools and one declarative Recovery Plan form.
+- WebMCP exposes three imperative tools and one declarative Recovery Plan form.
 - The Live incident track previews the next tool or form handoff at each recovery step.
-- `inspect_current_incident` reads the live incident and focuses the affected service; `show_change_comparison` renders the selected deployment change. Both are annotated read-only and untrusted-content.
+- `inspect_current_incident` reads the live incident and focuses the affected service; `show_change_comparison` renders the selected deployment change; `propose_remediation_options` places a recommendation and three alternatives on the recovered page. All three are annotated read-only and untrusted-content because none performs an external write.
 - The form intentionally omits `toolautosubmit`; the operator must press Submit.
 - The reset control is a normal human page action, not a WebMCP tool. It writes only the allowlisted broken checkout version and verifies checkout 500 before reporting READY.
 - `POST /api/lab/competing-deployment` is a demo-only scenario control, not a WebMCP tool or Recovery Plan write. It requires the same-origin `X-Incident-Room-Action: make-plan-stale` header and writes only the allowlisted concurrent checkout version used to prove `PLAN_STALE` without rollback.

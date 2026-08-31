@@ -1,5 +1,11 @@
 import { useEffect, useState } from "react";
-import type { ChangeComparison, IncidentSummary } from "./domain";
+import type {
+  ChangeComparison,
+  IncidentSummary,
+  RecoveryResult,
+  RemediationPath,
+  RemediationProposal,
+} from "./domain";
 
 export type WebMcpStatus = "REGISTERING" | "READY" | "UNSUPPORTED" | "ERROR";
 
@@ -43,6 +49,10 @@ interface WebMcpActions {
     changeId: string,
     source?: "AGENT" | "HUMAN",
   ) => Promise<ChangeComparison>;
+  getVerifiedRecovery: () => RecoveryResult | undefined;
+  proposeRemediationOptions: (
+    proposal: Omit<RemediationProposal, "state" | "selectedPath">,
+  ) => RemediationProposal;
 }
 
 export function useWebMcpTools(actions: WebMcpActions): WebMcpStatus {
@@ -86,11 +96,16 @@ export function useWebMcpTools(actions: WebMcpActions): WebMcpStatus {
             const incident = await actions.inspectCurrentIncident(sinceMinutes, "AGENT");
             const recoveryReady =
               incident.health.checkout === "DEGRADED" && incident.health.payment === "HEALTHY";
+            const verifiedRecovery = actions.getVerifiedRecovery();
             return {
               ...incident,
               recoveryReady,
+              recoveryVerified: Boolean(verifiedRecovery),
+              regressedDeploymentId: verifiedRecovery?.currentDeploymentId,
               nextAction: recoveryReady
                 ? "Call show_change_comparison with the suspected change ID. The result will open the visible rollback proposal for review."
+                : verifiedRecovery
+                  ? "Recovery is already verified at 200. Call propose_remediation_options with the regressed deployment ID, diagnosis, recommendation, and rationale."
                 : "Stop. Ask the human to press Start 100-second demo in this page, then inspect the incident again.",
             };
           },
@@ -127,6 +142,75 @@ export function useWebMcpTools(actions: WebMcpActions): WebMcpStatus {
               ...comparison,
               nextAction:
                 "The Recovery Plan and exact checkout rollback operation are now visible in this tab. Fill its visible fields for human review, but do not submit it.",
+            };
+          },
+        },
+        { signal: controller.signal },
+      ),
+      modelContext.registerTool(
+        {
+          name: "propose_remediation_options",
+          description:
+            "After the same checkout request is verified at 200, place three permanent-fix paths in this live page, mark one recommendation, and leave the final choice to the human. This creates no issue, PR, or deployment.",
+          inputSchema: {
+            type: "object",
+            properties: {
+              regressedDeploymentId: {
+                type: "string",
+                maxLength: 128,
+                description: "The regressed deployment ID from the verified recovery result.",
+              },
+              rootCauseSummary: {
+                type: "string",
+                minLength: 1,
+                maxLength: 500,
+                description: "Evidence-backed summary of the checkout regression to correct.",
+              },
+              recommendedPath: {
+                type: "string",
+                enum: ["FIX_FORWARD_PR", "HOLD_ROLLBACK", "EMERGENCY_HOTFIX"],
+                description: "The path the agent recommends for human review.",
+              },
+              rationale: {
+                type: "string",
+                minLength: 1,
+                maxLength: 800,
+                description: "Why this path best fits the verified evidence and current service health.",
+              },
+            },
+            required: ["regressedDeploymentId", "rootCauseSummary", "recommendedPath", "rationale"],
+            additionalProperties: false,
+          },
+          annotations: {
+            readOnlyHint: true,
+            untrustedContentHint: true,
+          },
+          execute: (input) => {
+            const recommendedPaths: RemediationPath[] = [
+              "FIX_FORWARD_PR",
+              "HOLD_ROLLBACK",
+              "EMERGENCY_HOTFIX",
+            ];
+            if (
+              typeof input.regressedDeploymentId !== "string" ||
+              typeof input.rootCauseSummary !== "string" ||
+              typeof input.rationale !== "string" ||
+              typeof input.recommendedPath !== "string" ||
+              !recommendedPaths.includes(input.recommendedPath as RemediationPath)
+            ) {
+              throw new Error("A verified deployment, diagnosis, recommendation, and rationale are required.");
+            }
+            const proposal = actions.proposeRemediationOptions({
+              regressedDeploymentId: input.regressedDeploymentId,
+              rootCauseSummary: input.rootCauseSummary,
+              recommendedPath: input.recommendedPath as RemediationPath,
+              rationale: input.rationale,
+            });
+            return {
+              ...proposal,
+              availablePaths: recommendedPaths,
+              nextAction:
+                "The remediation options and recommendation are visible in this tab. Ask the human to choose and record a path; do not claim an issue, PR, or deployment was created.",
             };
           },
         },

@@ -3,6 +3,7 @@ export type HealthStatus = "HEALTHY" | "DEGRADED" | "UNKNOWN";
 export type EvidenceMode = "LIVE" | "FIXTURE";
 export type EvidenceSourceMode = "BUILT_IN_LAB" | "SELF_HOSTED" | "LOCAL_FIXTURE";
 export type ScopeMode = "checkout" | "checkout_and_payment";
+export type RemediationPath = "FIX_FORWARD_PR" | "HOLD_ROLLBACK" | "EMERGENCY_HOTFIX";
 export type PlanState =
   | "EMPTY"
   | "EVIDENCE_READY"
@@ -94,6 +95,15 @@ export interface RecoveryPlan {
   state: PlanState;
   result?: RecoveryResult;
   activities: PlanActivity[];
+}
+
+export interface RemediationProposal {
+  regressedDeploymentId: string;
+  rootCauseSummary: string;
+  recommendedPath: RemediationPath;
+  rationale: string;
+  state: "PROPOSED" | "SELECTED";
+  selectedPath?: RemediationPath;
 }
 
 export const FIXTURE_INCIDENT: IncidentSummary = {

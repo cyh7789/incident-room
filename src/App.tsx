@@ -435,9 +435,6 @@ export default function App() {
   const agentPreparedPlan = plan.activities.some(
     (activity) => activity.id === "agent-prepared-plan",
   );
-  const showsRegisteredWebMcpSurface =
-    webMcpStatus === "REGISTERING" || webMcpStatus === "READY";
-
   useEffect(() => {
     if (!isExplainerOpen) return;
     const previousOverflow = document.body.style.overflow;
@@ -607,18 +604,6 @@ export default function App() {
                   ? "Cloudflare lab"
                   : "Local fixture"}
             </span>
-            <a
-              href="#live-incident-track"
-              className={`runtime-badge webmcp-surface-trigger webmcp-${webMcpStatus.toLowerCase()}`}
-              aria-label={showsRegisteredWebMcpSurface
-                ? "Jump to Live incident track: 2 tools and 1 declarative form"
-                : `View Live incident track: WebMCP ${webMcpStatus.toLowerCase()}`}
-            >
-              <Bot aria-hidden="true" size={14} />
-              {showsRegisteredWebMcpSurface
-                ? "WebMCP · 2 tools + 1 form"
-                : `WebMCP ${webMcpStatus.toLowerCase()}`}
-            </a>
           </div>
         </div>
       </header>

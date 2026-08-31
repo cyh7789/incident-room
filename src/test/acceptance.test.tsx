@@ -143,17 +143,16 @@ describe("Incident Room acceptance", () => {
     ).not.toBeNull();
   });
 
-  test("does not claim a registered WebMCP path in unsupported browsers", async () => {
+  test("keeps unsupported WebMCP status in the track without a header tool control", async () => {
     const view = renderApp();
 
     await waitFor(() => expect(view.container.querySelector(".webmcp-unsupported")).not.toBeNull());
     expect(view.container.querySelector(".webmcp-unsupported")?.textContent?.trim()).toBe(
       "WebMCP unsupported",
     );
-    const pathLink = screen.getByRole("link", {
+    expect(screen.queryByRole("link", {
       name: "View Live incident track: WebMCP unsupported",
-    });
-    expect(pathLink.getAttribute("href")).toBe("#live-incident-track");
+    })).toBeNull();
   });
 
   test("onboards people into the live demo, local install, and WebMCP boundary", async () => {
@@ -179,6 +178,7 @@ describe("Incident Room acceptance", () => {
     expect(within(incidentTrack).getAllByText("show_change_comparison").length).toBeGreaterThanOrEqual(1);
     expect(within(incidentTrack).getAllByText("prepare_recovery_rehearsal").length).toBeGreaterThanOrEqual(1);
     expect(within(incidentTrack).getAllByText("Controller response").length).toBeGreaterThanOrEqual(1);
+    await waitFor(() => expect(within(incidentTrack).getByText("WebMCP ready")).toBeTruthy());
     const handoff = within(incidentTrack).getByLabelText("Current WebMCP handoff");
     expect(within(handoff).getByText("Next agent call")).toBeTruthy();
     expect(within(handoff).getByText("Read only")).toBeTruthy();
@@ -227,10 +227,9 @@ describe("Incident Room acceptance", () => {
     expect(screen.queryByRole("dialog", { name: "Get started with Incident Room" })).toBeNull();
     expect(document.activeElement).toBe(trigger);
 
-    const pathLink = screen.getByRole("link", {
+    expect(screen.queryByRole("link", {
       name: "Jump to Live incident track: 2 tools and 1 declarative form",
-    });
-    expect(pathLink.getAttribute("href")).toBe("#live-incident-track");
+    })).toBeNull();
   });
 
   test("webmcp/shared-visible-state", async () => {

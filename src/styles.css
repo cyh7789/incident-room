@@ -150,8 +150,6 @@ a:focus-visible {
 }
 
 .runtime-badge { min-height: 30px; padding: 6px 10px; background: rgb(255 250 244 / 0.72); color: var(--text-muted); }
-.webmcp-surface-trigger { cursor: pointer; font: inherit; text-decoration: none; }
-.webmcp-surface-trigger:hover { border-color: var(--accent-strong); box-shadow: 0 3px 10px rgb(80 61 48 / 0.1); }
 .mode-live, .webmcp-ready { border-color: #9cad9d; background: #edf2eb; color: var(--success); }
 .mode-loading, .webmcp-registering { border-color: #b9aa9c; background: #f0e8de; color: var(--text-muted); }
 .mode-fixture, .webmcp-unsupported { border-color: #bd9a89; background: #f5e9e1; color: var(--accent-strong); }

@@ -90,7 +90,7 @@ export function useWebMcpTools(actions: WebMcpActions): WebMcpStatus {
               ...incident,
               recoveryReady,
               nextAction: recoveryReady
-                ? "Call show_change_comparison with the suspected change ID. The result will open the visible Recovery Plan for review."
+                ? "Call show_change_comparison with the suspected change ID. The result will open the visible rollback proposal for review."
                 : "Stop. Ask the human to press Start 100-second demo in this page, then inspect the incident again.",
             };
           },
@@ -101,7 +101,7 @@ export function useWebMcpTools(actions: WebMcpActions): WebMcpStatus {
         {
           name: "show_change_comparison",
           description:
-            "Open the visible comparison for a suspected change already listed in the current incident. The result advances this same page to the mounted Recovery Plan for review.",
+            "Open the visible comparison for a suspected change already listed in the current incident. The result advances this same page to the mounted Recovery Plan and exact checkout rollback proposal.",
           inputSchema: {
             type: "object",
             properties: {
@@ -126,7 +126,7 @@ export function useWebMcpTools(actions: WebMcpActions): WebMcpStatus {
             return {
               ...comparison,
               nextAction:
-                "The Recovery Plan is now visible in this tab. Fill its visible fields for human review, but do not submit it.",
+                "The Recovery Plan and exact checkout rollback operation are now visible in this tab. Fill its visible fields for human review, but do not submit it.",
             };
           },
         },

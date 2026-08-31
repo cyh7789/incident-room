@@ -98,8 +98,8 @@ function ServiceButton({
   );
 }
 
-type GuidedStep = 1 | 2 | 3 | 4;
-type GettingStartedTab = "use" | "install";
+type GuidedStep = 1 | 2 | 3 | 4 | 5;
+type GettingStartedTab = "use" | "install" | "connect";
 
 interface GuidedHumanAction {
   title: string;
@@ -143,16 +143,26 @@ const guidedSteps: Array<{
   },
   {
     id: 3,
-    label: "Approve",
-    detail: "Human decides",
-    icon: <UserRound aria-hidden="true" size={18} />,
-    surfaceCue: "Shared page handoff",
+    label: "Plan",
+    detail: "Propose rollback",
+    icon: <LockKeyhole aria-hidden="true" size={18} />,
+    surfaceCue: "Agent prepares",
     surfaceName: "prepare_recovery_rehearsal",
-    surfaceKind: "Declarative form · human submit",
-    surfaceDetail: "The agent fills the mounted plan. The human changes scope and personally submits it.",
+    surfaceKind: "Declarative form · no write",
+    surfaceDetail: "The agent fills the mounted plan with the exact precheck, checkout rollback, and verification path.",
   },
   {
     id: 4,
+    label: "Approve",
+    detail: "Human submits",
+    icon: <UserRound aria-hidden="true" size={18} />,
+    surfaceCue: "Required person action",
+    surfaceName: "Human Submit",
+    surfaceKind: "Only write entry point",
+    surfaceDetail: "The human reviews the proposed operation, narrows scope, and personally submits this page state.",
+  },
+  {
+    id: 5,
     label: "Verify",
     detail: "Prove 500 → 200",
     icon: <ShieldCheck aria-hidden="true" size={18} />,
@@ -218,7 +228,7 @@ function GuidedProgress({
               : {
                   mode: "idle",
                   title: "Follow one causal path",
-                  detail: "Observe the live failure, diagnose the change, approve the smallest plan, then verify the same request.",
+                  detail: "Observe the live failure, diagnose the change, inspect the rollback plan, approve it, then verify the same request.",
                 };
 
   return (
@@ -230,13 +240,13 @@ function GuidedProgress({
       <div className="guided-progress-heading">
         <div>
           <p className="eyebrow">Live incident track</p>
-          <h2 id="guided-title">500 observed → change found → human approval → 200 verified</h2>
+          <h2 id="guided-title">500 observed → change found → rollback proposed → human approval → 200 verified</h2>
         </div>
         <div className="guided-heading-status">
           <span className={`guided-webmcp-status webmcp-${webMcpStatus.toLowerCase()}`}>
             <CircleDot aria-hidden="true" size={12} /> WebMCP {webMcpStatus.toLowerCase()}
           </span>
-          <span className="guided-count">Step {activeStep} of 4</span>
+          <span className="guided-count">Step {activeStep} of 5</span>
         </div>
       </div>
       <ol className="guided-stepper" aria-label="Recovery rehearsal steps">
@@ -293,7 +303,7 @@ function GuidedProgress({
             <small>{activeSurface.surfaceKind}</small>
           </div>
           <div className="guided-surface-name">
-            {activeStep < 4 ? <Bot aria-hidden="true" size={16} /> : <ShieldCheck aria-hidden="true" size={16} />}
+            {activeStep < 4 ? <Bot aria-hidden="true" size={16} /> : activeStep === 4 ? <UserRound aria-hidden="true" size={16} /> : <ShieldCheck aria-hidden="true" size={16} />}
             <code>{activeSurface.surfaceName}</code>
           </div>
           <p>{activeSurface.surfaceDetail}</p>
@@ -482,9 +492,9 @@ export default function App() {
     plan.state === "STALE" ||
     plan.state === "RECOVERED" ||
     plan.state === "FAILED"
-      ? 4
+      ? 5
       : plan.state === "DRAFTED" || plan.state === "HUMAN_EDITED" || selectedChange
-        ? 3
+        ? 4
         : isIncidentLoading
           ? 1
           : 2;
@@ -542,14 +552,18 @@ export default function App() {
     setActiveStep(step);
   }, []);
 
-  const reviewRecoveryPlan = useCallback(() => {
-    setActiveStep(3);
+  const focusRecoveryPlan = useCallback((step: 3 | 4) => {
+    setActiveStep(step);
     requestAnimationFrame(() => {
       const scopeMode = document.getElementById("scopeMode") as HTMLSelectElement | null;
       if (scopeMode && !scopeMode.disabled) scopeMode.focus();
       else document.getElementById("plan-title")?.focus();
     });
   }, []);
+
+  const reviewRecoveryPlan = useCallback(() => {
+    focusRecoveryPlan(hasPreparedPlan ? 4 : 3);
+  }, [focusRecoveryPlan, hasPreparedPlan]);
 
   const syncDraftFromForm = useCallback(
     (state: "DRAFTED" | "HUMAN_EDITED") => {
@@ -590,14 +604,14 @@ export default function App() {
 
   useEffect(() => {
     if (plan.state === "DRAFTED" || plan.state === "HUMAN_EDITED") {
-      setActiveStep(3);
+      setActiveStep(4);
     } else if (
       plan.state === "SUBMITTING" ||
       plan.state === "STALE" ||
       plan.state === "RECOVERED" ||
       plan.state === "FAILED"
     ) {
-      setActiveStep(4);
+      setActiveStep(5);
     }
   }, [plan.state]);
 
@@ -651,13 +665,13 @@ export default function App() {
   };
 
   const humanAction: GuidedHumanAction = (() => {
-    if (activeStep < 4 && ["SUBMITTING", "STALE", "RECOVERED", "FAILED"].includes(plan.state)) {
+    if (activeStep < 5 && ["SUBMITTING", "STALE", "RECOVERED", "FAILED"].includes(plan.state)) {
       return {
         title: "A recovery result is already available",
         detail: "Return to the guarded Controller response without searching through the page.",
         label: "Return to result",
         icon: <ShieldCheck aria-hidden="true" size={17} />,
-        onClick: () => goToStep(4),
+        onClick: () => goToStep(5),
       };
     }
 
@@ -712,9 +726,9 @@ export default function App() {
       if (selectedChange) {
         return {
           title: "Deployment evidence is visible",
-          detail: "Move to the shared Recovery Plan and inspect every proposed value before approval.",
-          label: "Review Recovery Plan",
-          icon: <UserRound aria-hidden="true" size={17} />,
+          detail: "Build the concrete checkout rollback, stale precheck, and 500 → 200 verification proposal.",
+          label: "Build rollback plan",
+          icon: <LockKeyhole aria-hidden="true" size={17} />,
           onClick: reviewRecoveryPlan,
         };
       }
@@ -730,11 +744,21 @@ export default function App() {
 
     if (activeStep === 3) {
       return {
-        title: "Human review happens on the shared page",
-        detail: "Inspect the visible values, change scopeMode, then personally Submit inside the form.",
-        label: "Review Recovery Plan",
+        title: "The rollback operation is now explicit",
+        detail: "Inspect the precheck, checkout-only deployment write, and same-request verification before approval.",
+        label: "Continue to human approval",
         icon: <UserRound aria-hidden="true" size={17} />,
-        onClick: reviewRecoveryPlan,
+        onClick: () => focusRecoveryPlan(4),
+      };
+    }
+
+    if (activeStep === 4) {
+      return {
+        title: "Human approval happens on this exact plan",
+        detail: "Narrow the scope to checkout, review the proposed rollback, then personally Submit inside the form.",
+        label: "Review approval form",
+        icon: <UserRound aria-hidden="true" size={17} />,
+        onClick: () => focusRecoveryPlan(4),
       };
     }
 
@@ -829,7 +853,7 @@ export default function App() {
                   setIsExplainerOpen(true);
                 }}
               >
-                See the 3 steps <ArrowRight aria-hidden="true" size={16} />
+                See how it works <ArrowRight aria-hidden="true" size={16} />
               </button>
             </div>
           </div>
@@ -999,9 +1023,11 @@ export default function App() {
                       ? "Attach the verified change"
                       : activeStep === 3
                         ? agentPreparedPlan
-                          ? "Agent draft, human decision"
-                          : "Visible defaults, human decision"
-                        : "Controller returns visible proof"}
+                          ? "Agent proposed the rollback operation"
+                          : "Rollback operation ready for inspection"
+                        : activeStep === 4
+                          ? "Human approves the exact operation"
+                          : "Controller returns visible proof"}
                 </strong>
                 <p>
                   {activeStep <= 2 && hasPreparedPlan
@@ -1011,10 +1037,10 @@ export default function App() {
                     : activeStep === 2
                       ? "The deployment comparison becomes the context for this same plan."
                       : activeStep === 3
-                        ? agentPreparedPlan
-                          ? "Review the agent draft, edit scopeMode, and personally Submit the final state."
-                          : "Review the visible defaults, edit scopeMode, and personally Submit the final state."
-                        : "A stale refusal and a verified rollback remain attached to this plan."}
+                        ? "Inspect the stale precheck, checkout deployment write, and same-request verification before approval."
+                        : activeStep === 4
+                          ? "Edit scopeMode, review the exact rollback, and personally Submit the final page state."
+                          : "A stale refusal and a verified rollback remain attached to this plan."}
                 </p>
               </div>
             </div>
@@ -1049,8 +1075,8 @@ export default function App() {
             <div className="plan-collaboration-note step-3-only" aria-label="Recovery Plan interface">
               {agentPreparedPlan ? <Bot aria-hidden="true" size={17} /> : <BookOpen aria-hidden="true" size={17} />}
               <span>
-                <strong>{agentPreparedPlan ? "Agent prepared this live form" : "Default plan values are ready for human review"}</strong>
-                <small>You can see every value, change the scope, and decide whether to Submit.</small>
+                <strong>{agentPreparedPlan ? "Agent prepared this rollback proposal" : "Default rollback proposal is ready for inspection"}</strong>
+                <small>The write operation is visible below. You can change the scope before deciding whether to Submit.</small>
               </span>
             </div>
 
@@ -1121,32 +1147,49 @@ export default function App() {
                 <code>{isIncidentLoading ? "Loading…" : plan.observedDeploymentId}</code>
               </div>
 
-              <button
-                type="submit"
-                className="primary-button"
-                disabled={isRecoveryDisabled}
-              >
-                {plan.state === "SUBMITTING" ? (
-                  <><RefreshCw className="spin" aria-hidden="true" size={17} /> Running rehearsal…</>
-                ) : plan.state === "RECOVERED" || incident.health.checkout !== "DEGRADED" ? (
-                  <><RefreshCw aria-hidden="true" size={17} /> Start 100-second demo first</>
-                ) : (
-                  <><ShieldCheck aria-hidden="true" size={17} /> Human approval · Run recovery rehearsal</>
-                )}
-              </button>
-              <p className="submit-note">
-                {incident.health.checkout === "DEGRADED"
-                  ? "The agent can fill this live form. Submit is the only path to the Controller Worker recovery write gate."
-                  : "Checkout is healthy. Start a fresh rehearsal before preparing another rollback."}
-              </p>
+              <section className="rollback-preview" aria-labelledby="rollback-preview-title">
+                <div className="rollback-preview-heading">
+                  <div>
+                    <p className="eyebrow">Proposed operation · no write yet</p>
+                    <h3 id="rollback-preview-title">Rollback checkout, then prove recovery</h3>
+                  </div>
+                  <span>Payment: no write</span>
+                </div>
+                <ol>
+                  <li><span>Precheck</span><p>Refuse with <code>PLAN_STALE</code> unless the current checkout deployment still matches <code>{plan.observedDeploymentId}</code>.</p></li>
+                  <li><span>Rollback</span><p>Deploy allowlisted <code>checkout-healthy</code> to <code>{incident.evidenceSource.services.checkout}</code> at 100%. Do not deploy payment.</p></li>
+                  <li><span>Verify</span><p>Repeat the fixed cart request and require HTTP <code>500 → 200</code> before claiming recovery.</p></li>
+                </ol>
+              </section>
+
+              <div className="approval-submit">
+                <button
+                  type="submit"
+                  className="primary-button"
+                  disabled={isRecoveryDisabled}
+                >
+                  {plan.state === "SUBMITTING" ? (
+                    <><RefreshCw className="spin" aria-hidden="true" size={17} /> Running rehearsal…</>
+                  ) : plan.state === "RECOVERED" || incident.health.checkout !== "DEGRADED" ? (
+                    <><RefreshCw aria-hidden="true" size={17} /> Start 100-second demo first</>
+                  ) : (
+                    <><ShieldCheck aria-hidden="true" size={17} /> Human approval · Execute checkout rollback</>
+                  )}
+                </button>
+                <p className="submit-note">
+                  {incident.health.checkout === "DEGRADED"
+                    ? "Submit is the only path to the Controller Worker recovery write gate. It executes the operation shown above."
+                    : "Checkout is healthy. Start a fresh rehearsal before preparing another rollback."}
+                </p>
+              </div>
             </form>
 
-            <div className="inline-controller-activity step-4-only" aria-label="Verification path">
+            <div className="inline-controller-activity step-5-only" aria-label="Verification path">
               <ShieldCheck aria-hidden="true" size={17} />
               <span><strong>Approved page → stale gate → rollback write → same request</strong><small>The Controller checks current deployment before any write.</small></span>
             </div>
 
-            <div className="result-area step-4-only" aria-live="polite">
+            <div className="result-area step-5-only" aria-live="polite">
               {plan.state === "FAILED" ? (
                 <div className="result-card result-execution_failed" role="alert">
                   <AlertTriangle aria-hidden="true" size={20} />
@@ -1172,14 +1215,34 @@ export default function App() {
                     </div>
                   </div>
                   {plan.result.status === "RECOVERED" && (
-                    <button
-                      type="button"
-                      className="text-button replay-button"
-                      onClick={startFreshRehearsal}
-                      disabled={isLabResetting}
-                    >
-                      <RefreshCw aria-hidden="true" size={15} /> Start another clean rehearsal
-                    </button>
+                    <>
+                      <section className="root-fix-handoff" aria-labelledby="root-fix-title">
+                        <div>
+                          <p className="eyebrow">Permanent fix handoff</p>
+                          <h3 id="root-fix-title">Recovery is complete. The root fix is not.</h3>
+                          <p>The rollback restored service. The simulated issue below hands the evidence to engineering, which then decides whether to keep the rollback or ship a tested fix-forward PR and redeploy.</p>
+                        </div>
+                        <span className="issue-draft-status">Simulated issue draft</span>
+                        <article className="issue-draft">
+                          <small>Title</small>
+                          <strong>[{incident.incidentId}] Fix checkout regression after rollback</strong>
+                          <p>Regressed deployment <code>{plan.result.currentDeploymentId}</code>. Add a fixed-cart regression test, keep payment unchanged, and ship a reviewed fix-forward checkout version.</p>
+                        </article>
+                        <ol>
+                          <li><span>1</span>Issue captures the regressed deployment and 500 → 200 proof.</li>
+                          <li><span>2</span>PR adds the permanent fix and regression test.</li>
+                          <li><span>3</span>A human reviews before a new checkout version is deployed.</li>
+                        </ol>
+                      </section>
+                      <button
+                        type="button"
+                        className="text-button replay-button"
+                        onClick={startFreshRehearsal}
+                        disabled={isLabResetting}
+                      >
+                        <RefreshCw aria-hidden="true" size={15} /> Start another clean rehearsal
+                      </button>
+                    </>
                   )}
                 </div>
               ) : (
@@ -1190,7 +1253,7 @@ export default function App() {
               )}
             </div>
 
-            <div className="plan-activity step-4-only" aria-live="polite">
+            <div className="plan-activity step-5-only" aria-live="polite">
               <div className="activity-heading">
                 <p className="eyebrow">Visible decision history</p>
                 <h3>Plan activity</h3>
@@ -1260,7 +1323,7 @@ export default function App() {
               onKeyDown={(event) => {
                 if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
                 event.preventDefault();
-                const tabs: GettingStartedTab[] = ["use", "install"];
+                const tabs: GettingStartedTab[] = ["use", "install", "connect"];
                 const currentIndex = tabs.indexOf(gettingStartedTab);
                 const offset = event.key === "ArrowRight" ? 1 : -1;
                 const nextTab = tabs[(currentIndex + offset + tabs.length) % tabs.length];
@@ -1273,7 +1336,8 @@ export default function App() {
             >
               {([
                 ["use", "Try live demo"],
-                ["install", "Run your own"],
+                ["install", "Run locally"],
+                ["connect", "Connect Workers"],
               ] as Array<[GettingStartedTab, string]>).map(([tab, label]) => (
                 <button
                   key={tab}
@@ -1310,11 +1374,11 @@ export default function App() {
                 <ol className="onboarding-steps" aria-label="100-second recovery walkthrough">
                   <li><span>1</span><div><strong>Start with a verified 500</strong><p>Press <b>Start 100-second demo</b>. The lab proves checkout is degraded while payment remains healthy.</p></div></li>
                   <li><span>2</span><div><strong>Ask the agent</strong><p>In ChatGPT’s in-app browser or WebMCP-enabled Chrome, ask: “Inspect the current incident, compare the suspected deployment change, then prepare a Recovery Plan for me to review.” The two read tools update this page.</p></div></li>
-                  <li><span>3</span><div><strong>Make the human decision</strong><p>Change Recovery scope to Checkout only, review the reason, and personally press Submit.</p></div></li>
+                  <li><span>3</span><div><strong>Inspect, approve, then hand off</strong><p>Review the checkout rollback operation, change Recovery scope to Checkout only, and personally press Submit. After 200 is verified, a simulated issue captures the permanent fix.</p></div></li>
                 </ol>
                 <div className="proof-result">
                   <ShieldCheck aria-hidden="true" size={18} />
-                  <p><strong>Expected proof</strong><span>Base: 500 → rollback → 200. If the deployment changes first: PLAN_STALE → no write.</span></p>
+                  <p><strong>Expected proof</strong><span>Base: 500 → approved checkout rollback → 200 → simulated root-fix issue. If the deployment changes first: PLAN_STALE → no write.</span></p>
                 </div>
                 <div className="browser-compatibility">
                   <Bot aria-hidden="true" size={19} />
@@ -1336,7 +1400,7 @@ export default function App() {
                 <div className="install-heading">
                   <div>
                     <p className="eyebrow">Open source and runnable</p>
-                    <h3>Start locally in four commands</h3>
+                    <h3>Run the interface locally</h3>
                   </div>
                   <a href="https://github.com/cyh7789/incident-room" target="_blank" rel="noreferrer">
                     Open source on GitHub <ArrowRight aria-hidden="true" size={16} />
@@ -1353,27 +1417,76 @@ npm run dev`}</code></pre>
                     <p>This starts a labelled local fixture until the Worker variables are configured. Fixture mode never claims a real rollback.</p>
                   </section>
                   <section aria-labelledby="worker-install-title">
-                    <small>Full Worker runtime</small>
-                    <h4 id="worker-install-title">Connect your Workers</h4>
+                    <small>Controller runtime</small>
+                    <h4 id="worker-install-title">Run with Worker variables</h4>
                     <pre><code>{`cp .dev.vars.example .dev.vars
 npm run dev:worker`}</code></pre>
-                    <p>Bind your own checkout and payment Workers, then provide their names, allowlisted version IDs, and a server-side Workers Scripts Write token.</p>
+                    <p>After the connection configuration is filled, this runs the same Controller used by the deployed site.</p>
                   </section>
                 </div>
+                <div className="install-note">
+                  <LockKeyhole aria-hidden="true" size={19} />
+                  <p>The local fixture is for interface review only. Open <strong>Connect Workers</strong> to wire real Cloudflare evidence and guarded deployment writes.</p>
+                </div>
+              </div>
+            )}
+
+            {gettingStartedTab === "connect" && (
+              <div
+                id="getting-started-panel-connect"
+                className="explainer-panel"
+                role="tabpanel"
+                aria-labelledby="getting-started-tab-connect"
+              >
+                <div className="install-heading">
+                  <div>
+                    <p className="eyebrow">Real Cloudflare connection</p>
+                    <h3>Connect a dedicated recovery environment</h3>
+                  </div>
+                  <a href="https://github.com/cyh7789/incident-room#connect-your-own-cloudflare-workers" target="_blank" rel="noreferrer">
+                    Full connection guide <ArrowRight aria-hidden="true" size={16} />
+                  </a>
+                </div>
+
+                <div className="wiring-path" aria-label="Cloudflare connection path">
+                  <span><small>1</small><strong>Your Workers</strong><em>health + checkout probe</em></span>
+                  <ArrowRight aria-hidden="true" size={15} />
+                  <span><small>2</small><strong>Service Bindings</strong><em>private live reads</em></span>
+                  <ArrowRight aria-hidden="true" size={15} />
+                  <span><small>3</small><strong>Controller</strong><em>allowlisted deployment write</em></span>
+                  <ArrowRight aria-hidden="true" size={15} />
+                  <span><small>4</small><strong>Recovery Plan</strong><em>agent prepares, human submits</em></span>
+                </div>
+
+                <ol className="connection-steps" aria-label="Worker connection steps">
+                  <li>
+                    <div className="connection-step-heading"><span>1</span><div><strong>Add the narrow Worker contract</strong><p>No log server or Incident Room SDK is required.</p></div></div>
+                    <pre><code>{"GET /health\n→ { serviceId, status, versionId,\n    versionTag, checkedAt }\n\nPOST /checkout\n← { cartId: incident-room-fixed-cart, total: 42 }\n→ return the real HTTP 200 or 500"}</code></pre>
+                  </li>
+                  <li>
+                    <div className="connection-step-heading"><span>2</span><div><strong>Bind the same Workers once</strong><p>Point the two Service Bindings at your checkout and payment Worker names.</p></div></div>
+                    <pre><code>{"\"services\": [\n  { \"binding\": \"CHECKOUT_SERVICE\",\n    \"service\": \"your-checkout\" },\n  { \"binding\": \"PAYMENT_SERVICE\",\n    \"service\": \"your-payment\" }\n]"}</code></pre>
+                  </li>
+                  <li>
+                    <div className="connection-step-heading"><span>3</span><div><strong>Allowlist versions, then deploy</strong><p>Use a dedicated Cloudflare account or recovery boundary.</p></div></div>
+                    <pre><code>{"cp .dev.vars.example .dev.vars\n# add Worker names, URLs, and version IDs\nwrangler secret put CLOUDFLARE_API_TOKEN\nnpm run deploy"}</code></pre>
+                  </li>
+                </ol>
+
                 <div className="connection-contract">
                   <div>
-                    <p className="eyebrow">Connection contract</p>
-                    <strong>Deployment configuration only. No Incident Room core code changes.</strong>
+                    <p className="eyebrow">What changes</p>
+                    <strong>Your Workers expose the contract. Incident Room changes only deployment configuration.</strong>
                   </div>
                   <ul>
-                    <li><code>GET /health</code> on checkout and payment returns service status plus the active version ID.</li>
-                    <li><code>POST /checkout</code> runs the deterministic checkout probe and returns its real HTTP status.</li>
-                    <li>Cloudflare Deployments API reads both deployment IDs and can write only the configured checkout Worker.</li>
+                    <li><code>CF_VERSION_METADATA.id</code> must match the active version returned by the Workers Deployments API.</li>
+                    <li>The server token stays outside the browser and can write only through the configured checkout allowlist.</li>
+                    <li>Success is visible when <code>/api/incident/current</code> returns 200 and names your evidence source.</li>
                   </ul>
                 </div>
                 <div className="install-note">
                   <LockKeyhole aria-hidden="true" size={19} />
-                  <p>Never expose the Cloudflare token to the browser. Use a dedicated account for this recovery boundary; Controller code writes only the configured checkout Worker. Follow the <a href="https://github.com/cyh7789/incident-room#connect-your-own-cloudflare-workers" target="_blank" rel="noreferrer">connection guide</a> for bindings, variables, and version allowlists.</p>
+                  <p>This is a Cloudflare-specific reference integration, not a generic incident platform. The included checkout and payment Workers are working examples you can adapt.</p>
                 </div>
               </div>
             )}

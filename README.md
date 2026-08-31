@@ -7,8 +7,9 @@ Incident Room is a WebMCP-powered recovery rehearsal for a dedicated Cloudflare 
 1. Open [incident-room.fongse.workers.dev](https://incident-room.fongse.workers.dev/) in ChatGPT's in-app browser or a WebMCP-capable Chrome browser.
 2. Press **Start 100-second demo**. Wait until the Controller proves checkout returns 500 while payment remains healthy.
 3. Ask the agent: **Inspect the current incident, compare the suspected deployment change, then prepare a Recovery Plan for me to review.** The agent calls two read tools, then fills the visible Recovery Plan.
-4. Review the mounted form, change **Recovery scope** to **Checkout only**, edit the reason if needed, then personally press **Submit**.
-5. If the Controller returns `PLAN_STALE`, refresh the evidence, revise the plan, and submit again. Recovery succeeds only when the same fixed checkout request changes from 500 to 200.
+4. Inspect the proposed operation: stale precheck, checkout-only deployment of `checkout-healthy`, no payment write, then the same fixed request must change from 500 to 200.
+5. Change **Recovery scope** to **Checkout only**, edit the reason if needed, then personally press **Submit**.
+6. If the Controller returns `PLAN_STALE`, refresh the evidence, revise the plan, and submit again. Recovery succeeds only when the same fixed checkout request changes from 500 to 200. After recovery, the page shows a simulated root-fix issue and the PR/redeploy decision without claiming either was executed.
 
 The public site uses one shared dedicated lab, so a later rehearsal can make an older Recovery Plan stale by design.
 
@@ -44,19 +45,74 @@ The required path covers WebMCP discovery, shared visible state, human-only lab 
 
 ## Connect your own Cloudflare Workers
 
-Incident Room is not tied to the public rehearsal names. A self-hosted deployment can connect another checkout and payment pair through Cloudflare configuration without changing the Incident Room application code.
+Incident Room is not tied to the public rehearsal names. A self-hosted deployment can connect another checkout and payment pair by adding the narrow endpoint contract and changing Cloudflare deployment configuration. The Controller, WebMCP tools, Recovery Plan, stale gate, and rollback code do not change.
+
+The actual connection path is:
+
+```text
+checkout + payment Workers
+  → Cloudflare Service Bindings for private health/probe reads
+  → Incident Room Controller
+  → Cloudflare Workers Deployments API for allowlisted checkout rollback
+  → Recovery Plan in the browser for agent preparation and human Submit
+```
+
+### 1. Add the endpoint contract to your Workers
 
 The connected Workers must provide this narrow contract:
 
 - Checkout and payment expose `GET /health`. The JSON response contains `serviceId`, `status`, `versionId`, `versionTag`, and `checkedAt`. The reported `versionId` must match the active deployment returned by the Cloudflare Workers Deployments API.
 - Checkout exposes `POST /checkout` for the deterministic probe `{ "cartId": "incident-room-fixed-cart", "total": 42 }`. Its real HTTP status is the before-and-after recovery proof.
-- `CHECKOUT_SERVICE` and `PAYMENT_SERVICE` are required Cloudflare Service Bindings to those Workers. The Controller returns 503 rather than silently switching transports when either binding is missing. Change the two `service` values in `wrangler.jsonc` when deploying against your own names.
-- `CHECKOUT_WORKER_NAME` and `PAYMENT_WORKER_NAME` identify the same two Workers to the Workers Deployments API. They must be different. The Controller never writes to the configured payment Worker.
-- The three checkout version IDs and the payment version ID are an immutable server-side allowlist. A recovery can deploy only `CHECKOUT_HEALTHY_VERSION_ID`; reset and stale-rehearsal controls use the other two checkout IDs.
 
-Set `EVIDENCE_SOURCE_MODE=SELF_HOSTED`, give the source a visible `EVIDENCE_SOURCE_LABEL`, and optionally change `INCIDENT_ID` and `INCIDENT_TITLE`. Keep `CLOUDFLARE_API_TOKEN` server-only. It needs account-level Workers Scripts Write permission because the same API reads deployment IDs and performs the guarded rollback. Use a dedicated account for this recovery boundary; Controller code still permits deployment writes only to `CHECKOUT_WORKER_NAME` and its allowlisted version IDs.
+Use `CF_VERSION_METADATA.id` in the health response so the Controller can prove that application health and the active deployment refer to the same immutable Worker version. The included [`lab-workers/checkout/index.ts`](lab-workers/checkout/index.ts) and [`lab-workers/payment/index.ts`](lab-workers/payment/index.ts) are executable reference implementations, not fixture-only pseudocode.
 
-This contract proves the integration boundary without introducing a generic connector or remote MCP server. The synchronous evidence path is Service Bindings, health and fixed probe responses, deployment IDs, and the Controller response. Workers Logs remain secondary evidence.
+### 2. Bind the same Workers to the Controller
+
+Change only the two `service` values in `wrangler.jsonc`:
+
+```jsonc
+"services": [
+  { "binding": "CHECKOUT_SERVICE", "service": "your-checkout-worker" },
+  { "binding": "PAYMENT_SERVICE", "service": "your-payment-worker" }
+]
+```
+
+`CHECKOUT_SERVICE` and `PAYMENT_SERVICE` are required Cloudflare Service Bindings. The Controller returns 503 rather than silently switching transports when either binding is missing.
+
+### 3. Configure names, URLs, and the version allowlist
+
+Copy `.dev.vars.example` and fill these server-side values:
+
+```bash
+cp .dev.vars.example .dev.vars
+```
+
+- `CHECKOUT_WORKER_NAME` and `PAYMENT_WORKER_NAME` identify the same two bound Workers to the Workers Deployments API. They must be different. The Controller never writes to the configured payment Worker.
+- `CHECKOUT_BASE_URL` and `PAYMENT_BASE_URL` provide the request origins used with the Service Bindings.
+- `CHECKOUT_BROKEN_VERSION_ID`, `CHECKOUT_HEALTHY_VERSION_ID`, and `CHECKOUT_CONCURRENT_VERSION_ID` form the checkout allowlist for the recovery rehearsal.
+- `PAYMENT_HEALTHY_VERSION_ID` pins the read-only payment evidence.
+- `EVIDENCE_SOURCE_MODE=SELF_HOSTED` and `EVIDENCE_SOURCE_LABEL` make the connected source visible on the page.
+
+The three checkout versions are deliberate rehearsal controls, not a generic production rollout model. Recovery can deploy only `CHECKOUT_HEALTHY_VERSION_ID`; reset and stale-plan proof use the other two allowlisted checkout versions.
+
+### 4. Add the server-only Cloudflare credential and deploy
+
+```bash
+npx wrangler secret put CLOUDFLARE_API_TOKEN
+npm run deploy
+```
+
+Optionally change `INCIDENT_ID` and `INCIDENT_TITLE`. Keep `CLOUDFLARE_API_TOKEN` server-only. It needs account-level Workers Scripts Write permission because the same API reads deployment IDs and performs the guarded rollback. Use a dedicated account for this recovery boundary; Controller code still permits deployment writes only to `CHECKOUT_WORKER_NAME` and its allowlisted version IDs.
+
+Verify the connection by opening `/api/incident/current`. Success is HTTP 200 with your `EVIDENCE_SOURCE_LABEL`, Worker names, health, and active deployment IDs. Then run the demo and confirm the page shows the exact rollback operation before Submit.
+
+This contract proves the integration boundary without introducing a generic connector, SDK package, log server, or remote MCP server. The synchronous evidence path is Service Bindings, health and fixed probe responses, deployment IDs, and the Controller response. Workers Logs remain secondary evidence.
+
+## Recovery versus permanent fix
+
+The 100-second path performs the emergency treatment that is safe to demonstrate: an allowlisted checkout rollback followed by same-request verification. A code fix is a separate engineering decision after service recovery.
+
+After a verified rollback, the page displays a simulated issue draft containing the regressed deployment, the 500 → 200 proof, the payment exclusion, and acceptance criteria. It does not call GitHub or claim that an issue or PR exists. The team can then keep the rollback active or create a tested fix-forward PR and deploy a new checkout version through its normal review process.
 
 ## Prepare the included rehearsal Workers
 

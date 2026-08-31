@@ -96,7 +96,7 @@ describe("Incident Room acceptance", () => {
     expect(screen.getAllByText("Loading lab evidence…")).toHaveLength(2);
 
     await waitFor(() => expect(screen.getByText("Cloudflare lab")).toBeTruthy());
-    expect(screen.getAllByText("broken-version-id")).toHaveLength(2);
+    expect(screen.getAllByText("broken-version-id")).toHaveLength(3);
     expect(screen.queryByText(/fixture-checkout-broken/i)).toBeNull();
     expect(fetchMock).toHaveBeenCalledWith("/api/incident/current", {
       headers: { Accept: "application/json" },
@@ -141,7 +141,7 @@ describe("Incident Room acceptance", () => {
     await waitFor(() => expect(screen.getByText("Ready · checkout 500")).toBeTruthy());
 
     const incidentTrack = screen.getByRole("region", {
-      name: "500 observed → change found → human approval → 200 verified",
+      name: "500 observed → change found → rollback proposed → human approval → 200 verified",
     });
     const humanAction = within(incidentTrack).getByLabelText("Human next action");
     const startButton = within(humanAction).getByRole("button", { name: "Start 100-second demo" });
@@ -212,12 +212,12 @@ describe("Incident Room acceptance", () => {
       name: "One live Recovery Plan. Agent prepares it. Human decides.",
     });
     expect(within(productIntro).queryByRole("button", { name: "Start 100-second demo" })).toBeNull();
-    expect(within(productIntro).getByRole("button", { name: "See the 3 steps" })).toBeTruthy();
+    expect(within(productIntro).getByRole("button", { name: "See how it works" })).toBeTruthy();
     expect(screen.getByText("500 observed")).toBeTruthy();
     expect(screen.getByText("PLAN_STALE if superseded · no write")).toBeTruthy();
     expect(screen.getByText("200 verified")).toBeTruthy();
     const incidentTrack = screen.getByRole("region", {
-      name: "500 observed → change found → human approval → 200 verified",
+      name: "500 observed → change found → rollback proposed → human approval → 200 verified",
     });
     expect(incidentTrack.getAttribute("id")).toBe("live-incident-track");
     expect(within(incidentTrack).getAllByText("inspect_current_incident").length).toBeGreaterThanOrEqual(1);
@@ -241,26 +241,37 @@ describe("Incident Room acceptance", () => {
     expect(within(dialog).getByRole("list", { name: "100-second recovery walkthrough" }).children).toHaveLength(3);
     expect(within(dialog).getByText(/start 100-second demo/i)).toBeTruthy();
     expect(within(dialog).getByText(/then prepare a recovery plan for me to review/i)).toBeTruthy();
-    expect(within(dialog).getByText(/change recovery scope to checkout only/i)).toBeTruthy();
-    expect(within(dialog).getByText(/Base: 500.*rollback.*200.*deployment changes first.*PLAN_STALE.*no write/i)).toBeTruthy();
+    expect(within(dialog).getByText(/review the checkout rollback operation.*change Recovery scope to Checkout only/i)).toBeTruthy();
+    expect(within(dialog).getByText(/Base: 500.*rollback.*200.*simulated root-fix issue.*PLAN_STALE.*no write/i)).toBeTruthy();
     expect(within(dialog).getByText(/ChatGPT Site tools currently lists the two imperative tools/i)).toBeTruthy();
     expect(within(dialog).getByText(/Chrome WebMCP also discovers the declarative form/i)).toBeTruthy();
 
     liveTab.focus();
     fireEvent.keyDown(liveTab, { key: "ArrowRight" });
     await waitFor(() => expect(document.activeElement?.id).toBe("getting-started-tab-install"));
-    expect(within(dialog).getByRole("tab", { name: "Run your own" }).getAttribute("aria-selected")).toBe("true");
+    expect(within(dialog).getByRole("tab", { name: "Run locally" }).getAttribute("aria-selected")).toBe("true");
     expect(within(dialog).getByText(/git clone https:\/\/github.com\/cyh7789\/incident-room.git/i)).toBeTruthy();
     expect(within(dialog).getByText(/npm run dev:worker/i)).toBeTruthy();
     expect(within(dialog).getByRole("link", { name: "Open source on GitHub" }).getAttribute("href")).toBe(
       "https://github.com/cyh7789/incident-room",
     );
     expect(within(dialog).getByText(/local fixture until the Worker variables are configured/i)).toBeTruthy();
-    expect(within(dialog).getByText(/bind your own checkout and payment Workers/i)).toBeTruthy();
-    expect(within(dialog).getByText(/no Incident Room core code changes/i)).toBeTruthy();
+    expect(within(dialog).getByText(/same Controller used by the deployed site/i)).toBeTruthy();
+
+    const localTab = within(dialog).getByRole("tab", { name: "Run locally" });
+    fireEvent.keyDown(localTab, { key: "ArrowRight" });
+    await waitFor(() => expect(document.activeElement?.id).toBe("getting-started-tab-connect"));
+    expect(within(dialog).getByRole("tab", { name: "Connect Workers" }).getAttribute("aria-selected")).toBe("true");
+    expect(within(dialog).getByRole("list", { name: "Worker connection steps" }).children).toHaveLength(3);
+    expect(within(dialog).getByText(/GET \/health/)).toBeTruthy();
+    expect(within(dialog).getByText(/POST \/checkout/)).toBeTruthy();
+    expect(within(dialog).getByText(/CHECKOUT_SERVICE/)).toBeTruthy();
+    expect(within(dialog).getByText(/wrangler secret put CLOUDFLARE_API_TOKEN/)).toBeTruthy();
+    expect(within(dialog).getByText(/Incident Room changes only deployment configuration/i)).toBeTruthy();
+    expect(within(dialog).getByText(/Cloudflare-specific reference integration/i)).toBeTruthy();
 
     const closeButton = within(dialog).getByRole("button", { name: "Close Get started" });
-    const setupGuide = within(dialog).getByRole("link", { name: "connection guide" });
+    const setupGuide = within(dialog).getByRole("link", { name: "Full connection guide" });
     closeButton.focus();
     fireEvent.keyDown(window, { key: "Tab", shiftKey: true });
     expect(document.activeElement).toBe(setupGuide);
@@ -297,7 +308,7 @@ describe("Incident Room acceptance", () => {
     ).toBeTruthy();
     expect(screen.getByText("Cloudflare lab")).toBeTruthy();
     expect(inspectResult?.nextAction).toBe(
-      "Call show_change_comparison with the suspected change ID. The result will open the visible Recovery Plan for review.",
+      "Call show_change_comparison with the suspected change ID. The result will open the visible rollback proposal for review.",
     );
     expect(screen.getByRole("main").getAttribute("data-active-step")).toBe("2");
     expect(screen.getByLabelText("Current WebMCP handoff").textContent).toContain(
@@ -313,7 +324,7 @@ describe("Incident Room acceptance", () => {
     });
     expect(screen.getByText("response status: 200 → 500")).toBeTruthy();
     expect(comparisonResult?.nextAction).toBe(
-      "The Recovery Plan is now visible in this tab. Fill its visible fields for human review, but do not submit it.",
+      "The Recovery Plan and exact checkout rollback operation are now visible in this tab. Fill its visible fields for human review, but do not submit it.",
     );
     expect(screen.getByRole("main").getAttribute("data-active-step")).toBe("3");
     expect(screen.getByLabelText("Current WebMCP handoff").textContent).toContain(
@@ -344,14 +355,14 @@ describe("Incident Room acceptance", () => {
 
     const main = screen.getByRole("main");
     const incidentTrack = screen.getByRole("region", {
-      name: "500 observed → change found → human approval → 200 verified",
+      name: "500 observed → change found → rollback proposed → human approval → 200 verified",
     });
     const humanAction = within(incidentTrack).getByLabelText("Human next action");
     const form = view.container.querySelector(
       'form[toolname="prepare_recovery_rehearsal"]',
     ) as HTMLFormElement;
     expect(screen.getByRole("heading", {
-      name: "500 observed → change found → human approval → 200 verified",
+      name: "500 observed → change found → rollback proposed → human approval → 200 verified",
     })).toBeTruthy();
     expect(screen.getByRole("heading", { name: "Recovery Plan" })).toBeTruthy();
     expect(screen.getByText("Recovery Plan not drafted yet")).toBeTruthy();
@@ -379,8 +390,10 @@ describe("Incident Room acceptance", () => {
     expect(screen.queryByText("Agent called show_change_comparison")).toBeNull();
     await waitFor(() => expect(document.activeElement?.id).toBe("scopeMode"));
     expect(main.getAttribute("data-active-step")).toBe("3");
-    expect(screen.getByText("Default plan values are ready for human review")).toBeTruthy();
-    expect(screen.queryByText("Agent prepared this live form")).toBeNull();
+    expect(screen.getByText("Default rollback proposal is ready for inspection")).toBeTruthy();
+    expect(screen.queryByText("Agent prepared this rollback proposal")).toBeNull();
+    expect(screen.getByRole("heading", { name: "Rollback checkout, then prove recovery" })).toBeTruthy();
+    expect(screen.getByText(/Deploy allowlisted/).textContent).toContain("incident-room-checkout");
 
     const toolActivated = new Event("toolactivated");
     Object.defineProperty(toolActivated, "toolName", {
@@ -390,12 +403,12 @@ describe("Incident Room acceptance", () => {
       window.dispatchEvent(toolActivated);
       await Promise.resolve();
     });
-    expect(main.getAttribute("data-active-step")).toBe("3");
-    expect(screen.getByRole("button", { name: /step 3: approve/i }).getAttribute("aria-current")).toBe("step");
-    expect(screen.getByLabelText("Current WebMCP handoff").textContent).toContain("prepare_recovery_rehearsal");
-    expect(screen.getByLabelText("Current WebMCP handoff").textContent).toContain("human submit");
+    expect(main.getAttribute("data-active-step")).toBe("4");
+    expect(screen.getByRole("button", { name: /step 4: approve/i }).getAttribute("aria-current")).toBe("step");
+    expect(screen.getByLabelText("Current WebMCP handoff").textContent).toContain("Human Submit");
+    expect(screen.getByLabelText("Current WebMCP handoff").textContent).toContain("Only write entry point");
     expect(screen.getByText("Agent draft is visible in this tab")).toBeTruthy();
-    expect(screen.getByText("Agent prepared this live form")).toBeTruthy();
+    expect(screen.getByText("Agent prepared this rollback proposal")).toBeTruthy();
     expect(view.container.contains(form)).toBe(true);
 
     fireEvent.click(screen.getByRole("button", { name: /step 1: observe/i }));
@@ -438,7 +451,7 @@ describe("Incident Room acceptance", () => {
     const submitEvent = new SubmitEvent("submit", {
       bubbles: true,
       cancelable: true,
-      submitter: screen.getByRole("button", { name: /run recovery rehearsal/i }),
+      submitter: screen.getByRole("button", { name: /execute checkout rollback/i }),
     });
     Object.defineProperty(submitEvent, "agentInvoked", { value: true });
     Object.defineProperty(submitEvent, "respondWith", { value: respondWith });
@@ -473,7 +486,7 @@ describe("Incident Room acceptance", () => {
     fireEvent.submit(form);
 
     await waitFor(() => expect(screen.getByText("Recovery request failed before verification")).toBeTruthy());
-    expect(screen.getByRole("main").getAttribute("data-active-step")).toBe("4");
+    expect(screen.getByRole("main").getAttribute("data-active-step")).toBe("5");
     expect(screen.getByRole("alert").textContent).toContain("Controller unavailable. Try again.");
     expect(screen.queryByText("No write occurs until the human submits this exact page state.")).toBeNull();
   });
@@ -531,7 +544,7 @@ describe("Incident Room acceptance", () => {
     expect(screen.getAllByText("PLAN_STALE").length).toBeGreaterThanOrEqual(1);
 
     const incidentTrack = screen.getByRole("region", {
-      name: "500 observed → change found → human approval → 200 verified",
+      name: "500 observed → change found → rollback proposed → human approval → 200 verified",
     });
     fireEvent.click(within(incidentTrack).getByRole("button", {
       name: "Refresh and revise plan",
@@ -554,6 +567,14 @@ describe("Incident Room acceptance", () => {
     expect(screen.getAllByText("PLAN_STALE").length).toBeGreaterThanOrEqual(1);
     expect(screen.getByText("Recovery proved by the same checkout request")).toBeTruthy();
     expect(screen.getByText("Recovered · restart to replay")).toBeTruthy();
+    expect(screen.getByRole("heading", {
+      name: "Recovery is complete. The root fix is not.",
+    })).toBeTruthy();
+    expect(screen.getByText("Simulated issue draft")).toBeTruthy();
+    const issueDraft = screen.getByText("Title").closest("article");
+    expect(issueDraft?.textContent).toContain("Regressed deployment concurrent-version-id");
+    expect(screen.getByText(/PR adds the permanent fix and regression test/i)).toBeTruthy();
+    expect(screen.queryByRole("link", { name: /root-fix issue/i })).toBeNull();
     expect(within(incidentTrack).getByRole("button", {
       name: "Replay from checkout 500",
     })).toBeTruthy();
@@ -621,7 +642,7 @@ describe("Incident Room acceptance", () => {
     );
 
     const incidentTrack = screen.getByRole("region", {
-      name: "500 observed → change found → human approval → 200 verified",
+      name: "500 observed → change found → rollback proposed → human approval → 200 verified",
     });
     expect(within(incidentTrack).getByRole("button", {
       name: "Restart from checkout 500",

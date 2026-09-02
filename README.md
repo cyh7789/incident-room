@@ -2,10 +2,23 @@
 
 Incident Room is a WebMCP-powered recovery rehearsal for a dedicated Cloudflare lab. A browser agent inspects the incident and fills the Recovery Plan visible on the page. The operator edits the recovery scope and manually submits the form before any checkout deployment changes.
 
+## WebMCP tools
+
+Registered on the page with `document.modelContext.registerTool()` and torn down with an `AbortController`, so they exist only while this tab does.
+
+| Tool | Kind | What it does |
+| --- | --- | --- |
+| `inspect_current_incident` | Imperative, `readOnlyHint` | Reads live health and active deployment IDs, focuses the affected service on the page, and returns the next step for the agent |
+| `show_change_comparison` | Imperative, `readOnlyHint` | Opens the deployment diff for a change ID already listed in the current incident |
+| `propose_remediation_options` | Imperative, `readOnlyHint` | After 200 is verified, places three permanent-fix paths on the page and marks the agent's recommendation |
+| Recovery Plan form | Declarative, no `toolautosubmit` | The agent fills the visible form and its call stays pending. Only a person can submit it |
+
+All three imperative tools update page state and never write to an external system. The deployment write is guarded on the server by an allowlist, not by these annotations.
+
 ## Live demo
 
-1. Open [incident-room.fongse.workers.dev](https://incident-room.fongse.workers.dev/) in ChatGPT's in-app browser or a WebMCP-capable Chrome browser.
-2. Press **Start 100-second demo**. Wait until the Controller proves checkout returns 500 while payment remains healthy.
+1. Open [incident-room.fongse.workers.dev](https://incident-room.fongse.workers.dev/) in ChatGPT's in-app browser or in Chrome 149+ with `chrome://flags/#enable-webmcp-testing` enabled.
+2. Press **Start 100-second demo** (the button reads **Restart from checkout 500** if the shared lab is already recovered). Wait until the Controller proves checkout returns 500 while payment remains healthy.
 3. Ask the agent: **Inspect the current incident, compare the suspected deployment change, then prepare a Recovery Plan for me to review.** The agent calls the incident and comparison tools, then fills the visible Recovery Plan.
 4. Inspect the proposed operation: stale precheck, checkout-only deployment of `checkout-healthy`, no payment write, then the same fixed request must change from 500 to 200.
 5. Change **Recovery scope** to **Checkout only**, edit the reason if needed, then personally press **Submit**.
